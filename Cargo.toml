@@ -1,0 +1,79 @@
+[package]
+name = "matrix-mcp-server-r2"
+version = "0.1.0"
+edition = "2021"
+authors = ["l0r3zz"]
+description = "Rust implementation of Matrix MCP Server - drop-in replacement for TypeScript version"
+license = "MIT"
+repository = "https://github.com/l0r3zz/matrix-mcp-server-r2"
+rust-version = "1.75"
+
+[dependencies]
+# Async runtime
+tokio = { version = "1.43", features = ["full", "rt-multi-thread"] }
+tokio-stream = "0.1"
+tokio-util = { version = "0.7", features = ["codec"] }
+
+# HTTP framework
+axum = { version = "0.8", features = ["macros"] }
+tower = { version = "0.5", features = ["full"] }
+tower-http = { version = "0.6", features = ["cors", "trace"] }
+hyper = { version = "1.6", features = ["full"] }
+
+# Matrix SDK
+matrix-sdk = { version = "0.10", default-features = false, features = ["rustls-tls", "e2e-encryption"] }
+matrix-sdk-crypto = { version = "0.10", optional = true }
+ruma = { version = "0.12", features = ["client-api-c", "compat"] }
+
+# Serialization
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+
+# Error handling
+thiserror = "2.0"
+anyhow = "1.0"
+
+# Logging/tracing
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
+
+# Environment/config
+dotenvy = "0.15"
+
+# Time handling
+chrono = { version = "0.4", features = ["serde"] }
+
+# Async utilities
+futures = "0.3"
+async-trait = "0.1"
+
+# HTTP client (for SSE transport)
+reqwest = { version = "0.12", features = ["rustls-tls", "json", "stream"] }
+
+# URL parsing
+url = "2.5"
+
+# Validation
+validator = { version = "0.20", features = ["derive"] }
+
+# UUID
+cuid2 = "0.1"
+
+[dev-dependencies]
+tokio-test = "0.4"
+wiremock = "0.6"
+serial_test = "3.2"
+
+[features]
+default = []
+e2ee = ["matrix-sdk-crypto"]
+
+[profile.release]
+opt-level = 3
+lto = true
+strip = true
+codegen-units = 1
+
+[profile.dev]
+opt-level = 0
+debug = true
