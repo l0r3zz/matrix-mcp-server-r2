@@ -1,0 +1,262 @@
+spec:
+  name: matrix-mcp-server-r2
+  summary: >
+    MCP server that exposes Matrix homeserver functionality for agents, with
+    v1-compatible tools for unencrypted rooms and v2 (-r2) tools that add E2EE
+    support and explicit crypto setup.
+
+  goals:
+    - Provide drop-in API compatibility with mjknowles/matrix-mcp-server for existing tools.
+    - Make v1 tools refuse to operate on encrypted rooms with a clear upgrade hint.
+    - Introduce v2 (-r2) tools that can handle both unencrypted and E2EE rooms via parameters.
+    - Add explicit E2EE bootstrap/setup tools to manage device keys and crypto state.
+
+  non_goals:
+    - Changing request/response shapes of v1 tools.
+    - Auto-upgrading existing clients to E2EE without an explicit switch to -r2 tools.
+    - Implementing full UX flows for human device verification or cross-signing.
+
+concepts:
+  RoomId:
+    description: Matrix room ID, e.g. "!abc123:example.org".
+    type: string
+
+  UserId:
+    description: Matrix user ID, e.g. "@user:example.org".
+    type: string
+
+  EncryptionMode:
+    description: >
+      How messages/rooms should be handled in r2 tools.
+      "none" = unencrypted (v1 behavior).
+      "e2ee" = create/use end-to-end encrypted rooms and messages.
+    type: string
+    enum: ["none", "e2ee"]
+    default: "none"
+
+  EncryptedRoomError:
+    description: >
+      Standardized error for v1 tools when they are invoked on an encrypted room.
+      Error code MUST match the existing mjknowles server.
+      Error message MUST be:
+      `room is encrypted; use *-r2 tools instead`
+
+apis:
+  v1:
+    description: >
+      Tools that match mjknowles/matrix-mcp-server behavior exactly.
+      These tools MUST:
+      - Work for unencrypted rooms as they do today.
+      - Refuse to operate on encrypted rooms with EncryptedRoomError.
+
+    tools:
+
+      list-joined-rooms:
+        name: list-joined-rooms
+        summary: List all rooms the client has joined.
+        request:
+          type: object
+          properties: {}
+        response:
+          type: object
+          properties:
+            rooms:
+              type: array
+              items:
+                type: object
+                properties:
+                  roomId: { $ref: "#/concepts/RoomId" }
+                  name:   { type: string, nullable: true }
+                  memberCount: { type: integer }
+        error_behavior:
+          - When called normally, behave exactly like mjknowles/matrix-mcp-server.
+          - When the Matrix client fails auth or sync, return the same codes/messages as the existing server.
+
+      get-room-info:
+        name: get-room-info
+        summary: Get detailed information about a specific room.
+        request:
+          type: object
+          properties:
+            roomId:
+              $ref: "#/concepts/RoomId"
+        response:
+          type: object
+          properties:
+            roomId:
+              $ref: "#/concepts/RoomId"
+            name:
+              type: string
+              nullable: true
+            topic:
+              type: string
+              nullable: true
+            isDirect:
+              type: boolean
+            memberCount:
+              type: integer
+            createdAt:
+              type: string
+              format: date-time
+            encryptionEnabled:
+              type: boolean
+              description: True if the room has m.room.encryption enabled.
+        error_behavior:
+          - If the room does not exist or is unknown, return the same error code/message as the v1 server.
+          - If the underlying Matrix API reports an error, propagate the same error code and a compatible message.
+
+      get-room-messages:
+        name: get-room-messages
+        summary: Get recent messages from a room (unencrypted only).
+        request:
+          type: object
+          properties:
+            roomId: { $ref: "#/concepts/RoomId" }
+            limit:
+              type: integer
+              default: 20
+        response:
+          type: object
+          properties:
+            messages:
+              type: array
+              items:
+                type: object
+                properties:
+                  eventId: { type: string }
+                  sender:  { $ref: "#/concepts/UserId" }
+                  body:    { type: string }
+                  timestamp: { type: string, format: date-time }
+        error_behavior:
+          - If room is encrypted, do not attempt to decrypt.
+          - Return EncryptedRoomError with the existing error code and message:
+            "room is encrypted; use *-r2 tools instead".
+
+      send-message:
+        name: send-message
+        summary: Send a message to a room (unencrypted only).
+        request:
+          type: object
+          properties:
+            roomId: { $ref: "#/concepts/RoomId" }
+            body:   { type: string }
+        response:
+          type: object
+          properties:
+            eventId: { type: string }
+        error_behavior:
+          - If room is encrypted, return EncryptedRoomError as above.
+
+  v2:
+    description: >
+      Extended tools that add E2EE support while remaining compatible with v1 semantics.
+      Tools are named with a -r2 suffix and include an optional encryption_mode parameter.
+
+    tools:
+
+      bootstrap-e2ee-r2:
+        name: bootstrap-e2ee-r2
+        summary: >
+          Initialize and verify E2EE state for this MCP device, including
+          device key upload and initial one-time keys.
+        request:
+          type: object
+          properties:
+            forceRecreate:
+              type: boolean
+              default: false
+              description: >
+                If true, clear and recreate local crypto store and re-upload keys.
+        response:
+          type: object
+          properties:
+            deviceId:
+              type: string
+            identityKey:
+              type: string
+            olmEnabled:
+              type: boolean
+            notes:
+              type: string
+
+      create-room-r2:
+        name: create-room-r2
+        summary: Create a room, optionally encrypted, superseding create-room.
+        request:
+          type: object
+          properties:
+            name:
+              type: string
+            isDirect:
+              type: boolean
+              default: false
+            invitees:
+              type: array
+              items: { $ref: "#/concepts/UserId" }
+            encryption_mode:
+              $ref: "#/concepts/EncryptionMode"
+        response:
+          type: object
+          properties:
+            roomId: { $ref: "#/concepts/RoomId" }
+            encryptionEnabled:
+              type: boolean
+
+      send-message-r2:
+        name: send-message-r2
+        summary: Send a message, supporting both unencrypted and E2EE rooms.
+        request:
+          type: object
+          properties:
+            roomId: { $ref: "#/concepts/RoomId" }
+            body:   { type: string }
+            encryption_mode:
+              $ref: "#/concepts/EncryptionMode"
+        response:
+          type: object
+          properties:
+            eventId: { type: string }
+            encrypted:
+              type: boolean
+
+      get-room-messages-r2:
+        name: get-room-messages-r2
+        summary: Get recent messages, decrypting if needed.
+        request:
+          type: object
+          properties:
+            roomId: { $ref: "#/concepts/RoomId" }
+            limit:
+              type: integer
+              default: 20
+        response:
+          type: object
+          properties:
+            messages:
+              type: array
+              items:
+                type: object
+                properties:
+                  eventId:   { type: string }
+                  sender:    { $ref: "#/concepts/UserId" }
+                  body:      { type: string }
+                  encrypted: { type: boolean }
+                  timestamp: { type: string, format: date-time }
+
+tests:
+  v1_compat:
+    description: >
+      All existing Matrix MCP endpoints must behave identically to the mjknowles/matrix-mcp-server.
+      Use matrix-mcp-test-plan.md as the reference for expected behavior and edge cases.
+    sources:
+      - file: matrix-mcp-test-plan.md
+
+  v2_e2ee:
+    description: >
+      New -r2 tools must pass additional E2EE scenarios:
+      - Agent-internal encrypted room creation and messaging.
+      - Refusal of v1 tools on encrypted rooms with EncryptedRoomError.
+
+# You can now:
+# Use get-room-info as a template for the other v1 tools in your test plan (users, notifications, etc.).
+# Extend the v2 section similarly as you design more E2EE‑aware operations.
