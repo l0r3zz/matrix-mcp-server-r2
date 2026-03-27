@@ -1,13 +1,8 @@
-//! Matrix MCP Server R2
-//! 
-//! A drop-in Rust replacement for the TypeScript matrix-mcp-server.
-//! Provides Matrix Client-Server API integration via MCP protocol.
-
+pub mod auth;
 pub mod config;
 pub mod error;
-pub mod mcp;
 pub mod matrix;
-pub mod tools;
+pub mod mcp;
 
 pub use config::Config;
 pub use error::{AppError, Result};

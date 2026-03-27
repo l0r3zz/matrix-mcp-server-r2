@@ -10,24 +10,24 @@ rust-version = "1.75"
 
 [dependencies]
 # Async runtime
-tokio = { version = "1.43", features = ["full", "rt-multi-thread"] }
-tokio-stream = "0.1"
-tokio-util = { version = "0.7", features = ["codec"] }
+tokio = { version = "1.43", features = ["full", "rt-multi-thread", "signal"] }
 
 # HTTP framework
 axum = { version = "0.8", features = ["macros"] }
 tower = { version = "0.5", features = ["full"] }
 tower-http = { version = "0.6", features = ["cors", "trace"] }
-hyper = { version = "1.6", features = ["full"] }
+
+# MCP SDK
+rmcp = { version = "1.2", default-features = false, features = ["server", "macros", "transport-streamable-http-server"] }
 
 # Matrix SDK
-matrix-sdk = { version = "0.10", default-features = false, features = ["rustls-tls", "e2e-encryption"] }
-matrix-sdk-crypto = { version = "0.10", optional = true }
+matrix-sdk = { version = "0.10", default-features = false, features = ["rustls-tls"] }
 ruma = { version = "0.12", features = ["client-api-c", "compat"] }
 
-# Serialization
+# Serialization & Schema
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
+schemars = "1"
 
 # Error handling
 thiserror = "2.0"
@@ -44,20 +44,10 @@ dotenvy = "0.15"
 chrono = { version = "0.4", features = ["serde"] }
 
 # Async utilities
-futures = "0.3"
 async-trait = "0.1"
-
-# HTTP client (for SSE transport)
-reqwest = { version = "0.12", features = ["rustls-tls", "json", "stream"] }
 
 # URL parsing
 url = "2.5"
-
-# Validation
-validator = { version = "0.20", features = ["derive"] }
-
-# UUID
-cuid2 = "0.1"
 
 [dev-dependencies]
 tokio-test = "0.4"
@@ -66,7 +56,7 @@ serial_test = "3.2"
 
 [features]
 default = []
-e2ee = ["matrix-sdk-crypto"]
+e2ee = ["matrix-sdk/e2e-encryption"]
 
 [profile.release]
 opt-level = 3
