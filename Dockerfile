@@ -25,6 +25,10 @@ WORKDIR /build
 # Makes the Rust/Cargo version visible in CI logs (must not be 1.82.x for edition2024 crates).
 RUN rustc --version && cargo --version
 
+# Fail fast if the builder somehow still has Cargo 1.82 (stale cache or wrong FROM).
+RUN cargo --version | grep -qv 'cargo 1\.82' || \
+    (echo "ERROR: Cargo 1.82 cannot build edition2024 crates. Use FROM rust:1.88-bookworm+ and clear GHA Docker cache." >&2; exit 1)
+
 # Cache dependency compilation: copy manifests first, build a dummy main,
 # then copy real sources. This way cargo only re-downloads/re-compiles deps
 # when Cargo.toml or Cargo.lock change.
