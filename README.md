@@ -79,6 +79,27 @@ cargo run
 # Health check at http://localhost:3000/health
 ```
 
+## Publishing (GHCR)
+
+Official images are built by GitHub Actions and pushed to **GitHub Container Registry** when you push a **semver git tag** whose version matches [`Cargo.toml`](Cargo.toml) `version` (the same value baked into the binary as `CARGO_PKG_VERSION`).
+
+1. Commit your changes and merge to the default branch.
+2. Create an annotated tag with a `v` prefix, e.g. for `0.1.0`:
+   - `git tag -a v0.1.0 -m "matrix-mcp-server-r2 0.1.0"`
+   - `git push origin v0.1.0`
+3. Open the repo on GitHub → **Actions** and confirm the **Publish Docker image** workflow succeeds.
+4. Under **Packages** (or the workflow summary), pull the image (use your GitHub username or org, lowercased):
+
+```bash
+docker pull ghcr.io/<github-owner>/matrix-mcp-server-r2:0.1.0
+```
+
+The `:latest` tag is updated on each tag push that matches `v*`. Image tags like `0.1.0` match the server version reported by `GET /health` and `matrix-mcp-server-r2 --version`.
+
+**Manual workflow run:** You can use **Actions → Publish Docker image → Run workflow** and select a **tag** as the ref (not only `main`) if you need to rebuild an existing release.
+
+**Optional:** Create a **GitHub Release** from the same tag for release notes; it is not required for GHCR.
+
 ## Configuration
 
 All configuration is via environment variables (or a `.env` file).
@@ -94,8 +115,48 @@ See `.env.example` for the full list. Required variables:
 ## Testing
 
 ```bash
+# Run all tests (unit + integration with wiremock mock homeserver)
 cargo test
+
+# Run only integration tests
+cargo test --test integration_tests
 ```
+
+### MCP Inspector Validation
+
+The MCP Inspector lets you interactively explore the server's protocol
+compliance -- `initialize`, `tools/list`, session management, and tool calls.
+
+**Option A -- Protocol-only (no Matrix homeserver needed):**
+
+```bash
+# Terminal 1: start with SKIP_MATRIX_INIT (no real Matrix connection)
+SKIP_MATRIX_INIT=true cargo run
+
+# Terminal 2: launch the inspector
+npx @modelcontextprotocol/inspector
+# connect to http://localhost:3000/mcp
+```
+
+In this mode the server starts instantly, `initialize` and `tools/list` work
+fully, but tool calls return Matrix connection errors. Good for verifying the
+MCP framing.
+
+**Option B -- Full stack (requires a Matrix homeserver):**
+
+```bash
+# Terminal 1: start with real credentials
+MATRIX_HOMESERVER_URL=https://matrix.example.com \
+MATRIX_USER_ID=@bot:example.com \
+MATRIX_ACCESS_TOKEN=syt_... \
+cargo run
+
+# Terminal 2:
+npx @modelcontextprotocol/inspector
+# connect to http://localhost:3000/mcp
+```
+
+In this mode tool calls execute against the real homeserver.
 
 ## Project Structure
 
