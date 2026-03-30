@@ -42,7 +42,10 @@ RUN mkdir -p src && echo 'fn main() { println!("placeholder"); }' > src/main.rs 
 
 # Now copy real source and rebuild
 COPY src/ src/
-RUN cargo build --release
+# IMPORTANT: Touch all .rs files so cargo detects them as newer than the
+# cached placeholder build. Without this, cargo's fingerprinting sees the
+# existing binary as up-to-date and skips recompilation.
+RUN find src -name '*.rs' -exec touch {} + && cargo build --release
 
 # ---- Stage 2: Runtime ----
 FROM debian:bookworm-slim
