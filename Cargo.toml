@@ -53,6 +53,7 @@ url = "2.5"
 tokio-test = "0.4"
 wiremock = "0.6"
 serial_test = "3.2"
+regex = "1"
 
 [features]
 default = []

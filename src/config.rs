@@ -29,23 +29,51 @@ pub struct Config {
     pub e2ee_enabled: bool,
     pub crypto_store_path: Option<String>,
     pub debug: bool,
+
+    /// When true, start the MCP server without connecting to Matrix.
+    /// Tools will return errors, but the MCP protocol layer is fully
+    /// functional. Useful for MCP Inspector validation.
+    pub skip_matrix_init: bool,
 }
 
 impl Config {
     pub fn from_env() -> Result<Self> {
         let _ = dotenvy::dotenv();
 
-        let matrix_homeserver_url = env::var("MATRIX_HOMESERVER_URL").map_err(|_| {
-            AppError::Config("MATRIX_HOMESERVER_URL environment variable is required".into())
-        })?;
+        let skip_matrix_init = env::var("SKIP_MATRIX_INIT")
+            .map(|v| v == "true" || v == "1")
+            .unwrap_or(false);
 
-        let matrix_access_token = env::var("MATRIX_ACCESS_TOKEN").map_err(|_| {
-            AppError::Config("MATRIX_ACCESS_TOKEN environment variable is required".into())
-        })?;
+        let matrix_homeserver_url = env::var("MATRIX_HOMESERVER_URL").unwrap_or_else(|_| {
+            if skip_matrix_init {
+                "http://localhost:8008".into()
+            } else {
+                String::new()
+            }
+        });
+        if matrix_homeserver_url.is_empty() {
+            return Err(AppError::Config(
+                "MATRIX_HOMESERVER_URL environment variable is required".into(),
+            ));
+        }
 
-        let matrix_user_id = env::var("MATRIX_USER_ID").map_err(|_| {
-            AppError::Config("MATRIX_USER_ID environment variable is required".into())
-        })?;
+        let matrix_access_token = env::var("MATRIX_ACCESS_TOKEN").unwrap_or_else(|_| {
+            if skip_matrix_init { "skip".into() } else { String::new() }
+        });
+        if matrix_access_token.is_empty() {
+            return Err(AppError::Config(
+                "MATRIX_ACCESS_TOKEN environment variable is required".into(),
+            ));
+        }
+
+        let matrix_user_id = env::var("MATRIX_USER_ID").unwrap_or_else(|_| {
+            if skip_matrix_init { "@mcp:localhost".into() } else { String::new() }
+        });
+        if matrix_user_id.is_empty() {
+            return Err(AppError::Config(
+                "MATRIX_USER_ID environment variable is required".into(),
+            ));
+        }
 
         let port = env::var("PORT")
             .or_else(|_| env::var("MCP_PORT"))
@@ -85,6 +113,9 @@ impl Config {
                 .unwrap_or(false),
             crypto_store_path: env::var("CRYPTO_STORE_PATH").ok(),
             debug: env::var("DEBUG")
+                .map(|v| v == "true" || v == "1")
+                .unwrap_or(false),
+            skip_matrix_init: env::var("SKIP_MATRIX_INIT")
                 .map(|v| v == "true" || v == "1")
                 .unwrap_or(false),
         })

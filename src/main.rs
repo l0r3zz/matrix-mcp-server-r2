@@ -11,8 +11,15 @@ use config::Config;
 use error::AppError;
 use mcp::server::MatrixMcpServer;
 
+const VERSION: &str = env!("CARGO_PKG_VERSION");
+
 #[tokio::main]
 async fn main() -> Result<(), AppError> {
+    if std::env::args().any(|a| a == "--version" || a == "-V") {
+        println!("matrix-mcp-server-r2 {}", VERSION);
+        return Ok(());
+    }
+
     tracing_subscriber::fmt()
         .with_env_filter(
             tracing_subscriber::EnvFilter::try_from_default_env()
@@ -20,30 +27,42 @@ async fn main() -> Result<(), AppError> {
         )
         .init();
 
-    info!("Starting Matrix MCP Server R2");
+    info!("Starting Matrix MCP Server R2 v{}", VERSION);
 
     let config = Config::from_env()?;
     config.validate()?;
     info!("Configuration loaded successfully");
 
-    let client = matrix::create_matrix_client(
-        &config.matrix_homeserver_url,
-        &config.matrix_user_id,
-        &config.matrix_access_token,
-    )
-    .await?;
-
-    let sync_handle = matrix::client::start_background_sync(client.clone());
-
-    let cache = matrix::ClientCache::new();
-    let cleanup_handle = cache.start_cleanup_task();
-    cache
-        .set(
-            &config.matrix_user_id,
+    let (client, sync_handle, cleanup_handle) = if config.skip_matrix_init {
+        info!("SKIP_MATRIX_INIT is set -- starting without Matrix connection");
+        info!("Tools will return errors; use this mode for MCP protocol testing only");
+        let client = matrix_sdk::Client::builder()
+            .homeserver_url(&config.matrix_homeserver_url)
+            .build()
+            .await
+            .map_err(|e| AppError::MatrixClient(format!("Failed to build stub client: {}", e)))?;
+        let sync_handle = tokio::spawn(async {});
+        let cleanup_handle = tokio::spawn(async {});
+        (client, sync_handle, cleanup_handle)
+    } else {
+        let client = matrix::create_matrix_client(
             &config.matrix_homeserver_url,
-            client.clone(),
+            &config.matrix_user_id,
+            &config.matrix_access_token,
         )
-        .await;
+        .await?;
+        let sync_handle = matrix::client::start_background_sync(client.clone());
+        let cache = matrix::ClientCache::new();
+        let cleanup_handle = cache.start_cleanup_task();
+        cache
+            .set(
+                &config.matrix_user_id,
+                &config.matrix_homeserver_url,
+                client.clone(),
+            )
+            .await;
+        (client, sync_handle, cleanup_handle)
+    };
 
     let port = config.port;
     let config = Arc::new(config);
@@ -67,7 +86,8 @@ async fn main() -> Result<(), AppError> {
             axum::routing::get(move || async move {
                 axum::Json(serde_json::json!({
                     "status": "healthy",
-                    "version": "0.1.0",
+                    "server": "matrix-mcp-server-r2",
+                    "version": VERSION,
                     "user_id": health_config.matrix_user_id,
                 }))
             }),
@@ -99,12 +119,10 @@ async fn main() -> Result<(), AppError> {
     let listener = tokio::net::TcpListener::bind(format!("0.0.0.0:{}", port)).await?;
     info!("MCP server listening on port {}", port);
 
-    let cache_for_shutdown = cache.clone();
     axum::serve(listener, app)
         .with_graceful_shutdown(async move {
             let _ = tokio::signal::ctrl_c().await;
             info!("Shutdown signal received");
-            cache_for_shutdown.shutdown_all().await;
             sync_handle.abort();
             cleanup_handle.abort();
         })

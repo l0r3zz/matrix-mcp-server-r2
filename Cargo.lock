@@ -1753,6 +1753,7 @@ dependencies = [
  "chrono",
  "dotenvy",
  "matrix-sdk",
+ "regex",
  "rmcp",
  "ruma",
  "schemars",

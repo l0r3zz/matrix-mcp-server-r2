@@ -256,7 +256,7 @@ impl MatrixMcpServer {
 #[tool_router]
 impl MatrixMcpServer {
     #[tool(description = "Get a list of all Matrix rooms the user has joined, including room names, IDs, and basic information")]
-    async fn list_joined_rooms(&self) -> Result<CallToolResult, McpError> {
+    pub async fn list_joined_rooms(&self) -> Result<CallToolResult, McpError> {
         let rooms = self.client.joined_rooms();
         if rooms.is_empty() {
             return Ok(single_text("No joined rooms found"));
@@ -270,7 +270,7 @@ impl MatrixMcpServer {
     }
 
     #[tool(description = "Get detailed information about a Matrix room including name, topic, settings, and member count")]
-    async fn get_room_info(&self, Parameters(input): Parameters<RoomIdInput>) -> Result<CallToolResult, McpError> {
+    pub async fn get_room_info(&self, Parameters(input): Parameters<RoomIdInput>) -> Result<CallToolResult, McpError> {
         let room = match self.get_room(&input.room_id) { Ok(r) => r, Err(e) => return Ok(e) };
         let name = self.room_name(&room).await;
         let topic = room.topic().unwrap_or_else(|| "No topic set".into());
@@ -284,7 +284,7 @@ impl MatrixMcpServer {
     }
 
     #[tool(description = "List all members currently joined to a Matrix room with their display names and user IDs")]
-    async fn get_room_members(&self, Parameters(input): Parameters<RoomIdInput>) -> Result<CallToolResult, McpError> {
+    pub async fn get_room_members(&self, Parameters(input): Parameters<RoomIdInput>) -> Result<CallToolResult, McpError> {
         let room = match self.get_room(&input.room_id) { Ok(r) => r, Err(e) => return Ok(e) };
         let members = match room.members(matrix_sdk::RoomMemberships::JOIN).await {
             Ok(m) => m,
@@ -300,7 +300,7 @@ impl MatrixMcpServer {
     }
 
     #[tool(description = "Retrieve recent messages from a specific Matrix room")]
-    async fn get_room_messages(&self, Parameters(input): Parameters<GetRoomMessagesInput>) -> Result<CallToolResult, McpError> {
+    pub async fn get_room_messages(&self, Parameters(input): Parameters<GetRoomMessagesInput>) -> Result<CallToolResult, McpError> {
         let room = match self.get_room(&input.room_id) { Ok(r) => r, Err(e) => return Ok(e) };
         let limit = input.limit.unwrap_or(20).max(1) as usize;
         let opts = matrix_sdk::room::MessagesOptions::backward();
@@ -317,7 +317,7 @@ impl MatrixMcpServer {
     }
 
     #[tool(description = "Retrieve messages from a Matrix room within a specific date range")]
-    async fn get_messages_by_date(&self, Parameters(input): Parameters<GetMessagesByDateInput>) -> Result<CallToolResult, McpError> {
+    pub async fn get_messages_by_date(&self, Parameters(input): Parameters<GetMessagesByDateInput>) -> Result<CallToolResult, McpError> {
         let room = match self.get_room(&input.room_id) { Ok(r) => r, Err(e) => return Ok(e) };
         let start_ms = chrono::DateTime::parse_from_rfc3339(&input.start_date).map(|d| d.timestamp_millis()).unwrap_or(0);
         let end_ms = chrono::DateTime::parse_from_rfc3339(&input.end_date).map(|d| d.timestamp_millis()).unwrap_or(i64::MAX);
@@ -335,7 +335,7 @@ impl MatrixMcpServer {
     }
 
     #[tool(description = "Find the most active users in a Matrix room based on message count")]
-    async fn identify_active_users(&self, Parameters(input): Parameters<IdentifyActiveUsersInput>) -> Result<CallToolResult, McpError> {
+    pub async fn identify_active_users(&self, Parameters(input): Parameters<IdentifyActiveUsersInput>) -> Result<CallToolResult, McpError> {
         let room = match self.get_room(&input.room_id) { Ok(r) => r, Err(e) => return Ok(e) };
         let limit = input.limit.unwrap_or(10).max(1) as usize;
         let opts = matrix_sdk::room::MessagesOptions::backward();
@@ -358,7 +358,7 @@ impl MatrixMcpServer {
     }
 
     #[tool(description = "Get profile information for a specific Matrix user")]
-    async fn get_user_profile(&self, Parameters(input): Parameters<TargetUserIdInput>) -> Result<CallToolResult, McpError> {
+    pub async fn get_user_profile(&self, Parameters(input): Parameters<TargetUserIdInput>) -> Result<CallToolResult, McpError> {
         let Ok(user_id) = ruma::OwnedUserId::try_from(input.target_user_id.as_str()) else {
             return Ok(err_text(format!("Error: Invalid user ID format: {}", input.target_user_id)));
         };
@@ -384,7 +384,7 @@ impl MatrixMcpServer {
     }
 
     #[tool(description = "Get your own profile information including display name, avatar, and device list")]
-    async fn get_my_profile(&self) -> Result<CallToolResult, McpError> {
+    pub async fn get_my_profile(&self) -> Result<CallToolResult, McpError> {
         let user_id = self.client.user_id().map(|u| u.to_string()).unwrap_or_default();
         let display_name = self.client.account().get_display_name().await.ok().flatten().unwrap_or_else(|| "No display name set".into());
         let avatar = self.client.account().get_avatar_url().await.ok().flatten().map(|u| u.to_string()).unwrap_or_else(|| "No avatar set".into());
@@ -398,7 +398,7 @@ impl MatrixMcpServer {
     }
 
     #[tool(description = "List all users known to the Matrix client")]
-    async fn get_all_users(&self) -> Result<CallToolResult, McpError> {
+    pub async fn get_all_users(&self) -> Result<CallToolResult, McpError> {
         let mut seen = std::collections::HashSet::new();
         let mut texts = Vec::new();
         for room in self.client.joined_rooms() {
@@ -416,7 +416,7 @@ impl MatrixMcpServer {
     }
 
     #[tool(description = "Search for public Matrix rooms that you can join")]
-    async fn search_public_rooms(&self, Parameters(input): Parameters<SearchPublicRoomsInput>) -> Result<CallToolResult, McpError> {
+    pub async fn search_public_rooms(&self, Parameters(input): Parameters<SearchPublicRoomsInput>) -> Result<CallToolResult, McpError> {
         use ruma::api::client::directory::get_public_rooms_filtered::v3::Request;
         use ruma::directory::Filter;
         let limit = input.limit.unwrap_or(20).max(1) as u32;
@@ -448,7 +448,7 @@ impl MatrixMcpServer {
     }
 
     #[tool(description = "Get unread message counts and notification status for Matrix rooms")]
-    async fn get_notification_counts(&self, Parameters(input): Parameters<GetNotificationCountsInput>) -> Result<CallToolResult, McpError> {
+    pub async fn get_notification_counts(&self, Parameters(input): Parameters<GetNotificationCountsInput>) -> Result<CallToolResult, McpError> {
         let rooms = self.client.joined_rooms();
         let filtered: Vec<_> = if let Some(ref fid) = input.room_filter {
             rooms.iter().filter(|r| r.room_id().as_str() == fid).collect()
@@ -477,7 +477,7 @@ impl MatrixMcpServer {
     }
 
     #[tool(description = "List all direct message conversations with their recent activity")]
-    async fn get_direct_messages(&self, Parameters(input): Parameters<GetDirectMessagesInput>) -> Result<CallToolResult, McpError> {
+    pub async fn get_direct_messages(&self, Parameters(input): Parameters<GetDirectMessagesInput>) -> Result<CallToolResult, McpError> {
         let include_empty = input.include_empty.unwrap_or(false);
         let my_uid = self.client.user_id().map(|u| u.to_string()).unwrap_or_default();
         let dm_rooms: Vec<_> = self.client.joined_rooms().into_iter().filter(|r| r.joined_members_count() == 2).collect();
@@ -502,7 +502,7 @@ impl MatrixMcpServer {
     // ---- Tier 1 ----
 
     #[tool(description = "Send a text message to a Matrix room, with support for plain text, HTML, and emotes")]
-    async fn send_message(&self, Parameters(input): Parameters<SendMessageInput>) -> Result<CallToolResult, McpError> {
+    pub async fn send_message(&self, Parameters(input): Parameters<SendMessageInput>) -> Result<CallToolResult, McpError> {
         use ruma::events::room::message::RoomMessageEventContent;
         let room = match self.get_room(&input.room_id) { Ok(r) => r, Err(e) => return Ok(e) };
         let msg_type = input.message_type.as_deref().unwrap_or("text");
@@ -521,7 +521,7 @@ impl MatrixMcpServer {
     }
 
     #[tool(description = "Send a direct message to a Matrix user. Creates a new DM room if one doesn't exist")]
-    async fn send_direct_message(&self, Parameters(input): Parameters<SendDirectMessageInput>) -> Result<CallToolResult, McpError> {
+    pub async fn send_direct_message(&self, Parameters(input): Parameters<SendDirectMessageInput>) -> Result<CallToolResult, McpError> {
         use ruma::api::client::room::create_room::v3::Request as CreateRoomRequest;
         use ruma::events::room::message::RoomMessageEventContent;
         let target_uid = match ruma::OwnedUserId::try_from(input.target_user_id.as_str()) {
@@ -560,7 +560,7 @@ impl MatrixMcpServer {
     }
 
     #[tool(description = "Create a new Matrix room with customizable settings")]
-    async fn create_room(&self, Parameters(input): Parameters<CreateRoomInput>) -> Result<CallToolResult, McpError> {
+    pub async fn create_room(&self, Parameters(input): Parameters<CreateRoomInput>) -> Result<CallToolResult, McpError> {
         use ruma::api::client::room::create_room::v3::{Request as CreateRoomRequest, RoomPreset};
         let is_private = input.is_private.unwrap_or(false);
         let mut req = CreateRoomRequest::new();
@@ -594,7 +594,7 @@ impl MatrixMcpServer {
     }
 
     #[tool(description = "Join a Matrix room by room ID or alias")]
-    async fn join_room(&self, Parameters(input): Parameters<JoinRoomInput>) -> Result<CallToolResult, McpError> {
+    pub async fn join_room(&self, Parameters(input): Parameters<JoinRoomInput>) -> Result<CallToolResult, McpError> {
         let room_or_alias = match ruma::OwnedRoomOrAliasId::try_from(input.room_id_or_alias.as_str()) {
             Ok(id) => id, Err(e) => return Ok(err_text(format!("Error: Invalid room ID or alias '{}': {}", input.room_id_or_alias, e))),
         };
@@ -611,7 +611,7 @@ impl MatrixMcpServer {
     }
 
     #[tool(description = "Leave a Matrix room with an optional reason message")]
-    async fn leave_room(&self, Parameters(input): Parameters<LeaveRoomInput>) -> Result<CallToolResult, McpError> {
+    pub async fn leave_room(&self, Parameters(input): Parameters<LeaveRoomInput>) -> Result<CallToolResult, McpError> {
         let room = match self.get_room(&input.room_id) { Ok(r) => r, Err(e) => return Ok(e) };
         let name = self.room_name(&room).await;
         if let Err(e) = room.leave().await {
@@ -622,7 +622,7 @@ impl MatrixMcpServer {
     }
 
     #[tool(description = "Invite a user to a Matrix room")]
-    async fn invite_user(&self, Parameters(input): Parameters<InviteUserInput>) -> Result<CallToolResult, McpError> {
+    pub async fn invite_user(&self, Parameters(input): Parameters<InviteUserInput>) -> Result<CallToolResult, McpError> {
         let room = match self.get_room(&input.room_id) { Ok(r) => r, Err(e) => return Ok(e) };
         let target_uid = match ruma::OwnedUserId::try_from(input.target_user_id.as_str()) {
             Ok(u) => u, Err(e) => return Ok(err_text(format!("Error: Invalid user ID '{}': {}", input.target_user_id, e))),
@@ -636,7 +636,7 @@ impl MatrixMcpServer {
     }
 
     #[tool(description = "Update the display name of a Matrix room")]
-    async fn set_room_name(&self, Parameters(input): Parameters<SetRoomNameInput>) -> Result<CallToolResult, McpError> {
+    pub async fn set_room_name(&self, Parameters(input): Parameters<SetRoomNameInput>) -> Result<CallToolResult, McpError> {
         use ruma::events::room::name::RoomNameEventContent;
         let room = match self.get_room(&input.room_id) { Ok(r) => r, Err(e) => return Ok(e) };
         let current = self.room_name(&room).await;
@@ -647,7 +647,7 @@ impl MatrixMcpServer {
     }
 
     #[tool(description = "Update the topic/description of a Matrix room")]
-    async fn set_room_topic(&self, Parameters(input): Parameters<SetRoomTopicInput>) -> Result<CallToolResult, McpError> {
+    pub async fn set_room_topic(&self, Parameters(input): Parameters<SetRoomTopicInput>) -> Result<CallToolResult, McpError> {
         use ruma::events::room::topic::RoomTopicEventContent;
         let room = match self.get_room(&input.room_id) { Ok(r) => r, Err(e) => return Ok(e) };
         let name = self.room_name(&room).await;
@@ -671,7 +671,7 @@ impl ServerHandler for MatrixMcpServer {
                 .enable_tools()
                 .build(),
         )
-        .with_server_info(Implementation::new("matrix-mcp-server", "0.1.0"))
+        .with_server_info(Implementation::new("matrix-mcp-server-r2", env!("CARGO_PKG_VERSION")))
         .with_instructions(
             "Matrix MCP Server providing room, message, and user management tools.".to_string(),
         )

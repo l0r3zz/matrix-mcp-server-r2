@@ -1,0 +1,10 @@
+target/
+reference/
+spec/
+tests/
+.a0proj/
+.git/
+.env
+.env.*
+!.env.example
+*.md
