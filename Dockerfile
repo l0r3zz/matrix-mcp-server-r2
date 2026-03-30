@@ -22,6 +22,9 @@ FROM rust:1.88-bookworm AS builder
 
 WORKDIR /build
 
+# Makes the Rust/Cargo version visible in CI logs (must not be 1.82.x for edition2024 crates).
+RUN rustc --version && cargo --version
+
 # Cache dependency compilation: copy manifests first, build a dummy main,
 # then copy real sources. This way cargo only re-downloads/re-compiles deps
 # when Cargo.toml or Cargo.lock change.

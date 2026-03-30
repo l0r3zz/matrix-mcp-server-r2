@@ -19,6 +19,12 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Verify Dockerfile builder image
+        run: |
+          set -euo pipefail
+          echo "Dockerfile FROM lines (builder must be rust:1.88-bookworm or newer, not 1.82):"
+          grep -n '^FROM' Dockerfile || true
+
       - name: Set image name (GHCR requires lowercase)
         id: image
         run: |
