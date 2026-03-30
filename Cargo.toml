@@ -6,7 +6,7 @@ authors = ["l0r3zz"]
 description = "Rust implementation of Matrix MCP Server - drop-in replacement for TypeScript version"
 license = "MIT"
 repository = "https://github.com/l0r3zz/matrix-mcp-server-r2"
-rust-version = "1.75"
+rust-version = "1.88"
 
 [dependencies]
 # Async runtime

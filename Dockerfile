@@ -16,7 +16,9 @@
 # =============================================================================
 
 # ---- Stage 1: Build ----
-FROM rust:1.82-bookworm AS builder
+# Toolchain floor is set by transitive deps (e.g. `darling`, `time` require rustc 1.88+;
+# `base64ct` needs Cargo that understands edition2024).
+FROM rust:1.88-bookworm AS builder
 
 WORKDIR /build
 
