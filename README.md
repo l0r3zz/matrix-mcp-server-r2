@@ -9,7 +9,7 @@
 |-------|-------------|--------|
 | 0 | Project scaffolding | Done |
 | 1 | Spec writing | Done |
-| 2 | v1 Implementation -- API parity | **In Progress** |
+| 2 | v1 Implementation -- API parity | Done |
 | 3 | v2 Implementation -- E2EE | Not started |
 | 4 | Integration testing & deployment | Not started |
 
