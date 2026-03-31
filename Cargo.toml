@@ -1,6 +1,6 @@
 [package]
 name = "matrix-mcp-server-r2"
-version = "0.1.0"
+version = "0.1.1"
 edition = "2021"
 authors = ["l0r3zz"]
 description = "Rust implementation of Matrix MCP Server - drop-in replacement for TypeScript version"
