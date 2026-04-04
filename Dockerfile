@@ -51,7 +51,7 @@ RUN find src -name '*.rs' -exec touch {} + && cargo build --release
 FROM debian:bookworm-slim
 
 RUN apt-get update && \
-    apt-get install -y --no-install-recommends ca-certificates && \
+    apt-get install -y --no-install-recommends ca-certificates curl && \
     rm -rf /var/lib/apt/lists/*
 
 COPY --from=builder /build/target/release/matrix-mcp-server-r2 /usr/local/bin/matrix-mcp-server-r2
