@@ -1,7 +1,7 @@
 # Matrix-MCP-SVR-R2
 
 > Rust implementation of the Matrix MCP Server -- a drop-in replacement for
-> [matrix-mcp-server](https://github.com/user/matrix-mcp-server) (TypeScript)
+> [matrix-mcp-server](https://github.com/mjknowles/matrix-mcp-server) (TypeScript)
 
 ## Status: Phase 2 -- v1 Implementation (API parity)
 
@@ -9,7 +9,7 @@
 |-------|-------------|--------|
 | 0 | Project scaffolding | Done |
 | 1 | Spec writing | Done |
-| 2 | v1 Implementation -- API parity | **In Progress** |
+| 2 | v1 Implementation -- API parity | Done |
 | 3 | v2 Implementation -- E2EE | Not started |
 | 4 | Integration testing & deployment | Not started |
 
