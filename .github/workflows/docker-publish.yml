@@ -52,12 +52,15 @@ jobs:
 
       # No GHA layer cache: stale cache has been observed restoring a Cargo 1.82 builder
       # while the Dockerfile requested rust:1.88, breaking edition2024 crates (rmp-serde, etc.).
+      # provenance=false ensures a plain Docker v2 manifest so ALL Docker versions can pull.
       - name: Build and push
         uses: docker/build-push-action@v6
         with:
           context: .
           file: Dockerfile
           push: true
+          provenance: false
+          sbom: false
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           no-cache: true
