@@ -1,0 +1,39 @@
+---
+description: Rust coding standards, error handling, and quality conventions
+globs: "src/**/*.rs"
+alwaysApply: false
+---
+
+# Rust Coding Conventions
+
+## Error Handling
+
+- Use `thiserror` for error type definitions in `src/error.rs`
+- Use `anyhow` for ad-hoc error contexts in non-library code
+- Never use `unwrap()` in tool implementations -- return `CallToolResult::error(...)` instead
+- Distinguish between recoverable errors (return to caller) and fatal errors (log + propagate)
+
+## Async Patterns
+
+- All async code runs on Tokio multi-threaded runtime
+- Use `tokio::sync::Mutex` (not `std::sync::Mutex`) when locks cross `.await` points
+- When `.clone()` is needed for async moves, comment why
+- Use `Arc<T>` for shared state; prefer channels over `Arc<Mutex<T>>` when viable
+
+## Ownership
+
+- Prefer borrowing (`&self`, `&str`, `&[T]`) over cloning
+- Follow the existing `Arc<Config>` pattern on `MatrixMcpServer` for shared state
+
+## Quality
+
+- Run `cargo clippy` (warn level) before committing
+- Run `cargo fmt` (rustfmt defaults) for formatting
+- Run `cargo test` to verify nothing breaks
+- Release profile uses LTO + strip + codegen-units=1
+
+## Dependencies
+
+- Don't add dependencies without justification
+- Check if existing crates (serde, tokio, axum) already provide needed functionality
+- Pin versions in Cargo.toml to avoid surprise breakage

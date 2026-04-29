@@ -1,0 +1,50 @@
+---
+description: How to define, modify, and test MCP tools using rmcp macros
+globs: "src/mcp/**/*.rs"
+alwaysApply: false
+---
+
+# MCP Tool Development
+
+## Tool Definition Pattern
+
+Tools are defined in `src/mcp/server.rs` using rmcp attribute macros:
+
+```rust
+#[tool(name = "tool-name", description = "What this tool does")]
+pub async fn tool_name(&self, #[tool(param)] input: ToolInput) -> Result<CallToolResult, McpError> {
+    // Implementation
+}
+```
+
+The `#[tool_router]` attribute on the impl block auto-generates MCP protocol routing.
+
+## Input Naming Convention
+
+All tool input fields use **camelCase** JSON names via serde rename:
+```rust
+#[serde(rename = "roomId")]
+pub room_id: String,
+```
+This matches TypeScript/agent caller expectations. Never use snake_case in the JSON API.
+
+## Adding a New Tool
+
+1. Define the input struct with serde + schemars derives
+2. Add the `#[tool(...)]` method to `MatrixMcpServer` in `server.rs`
+3. Use `self.client` for Matrix operations (shared client, not ephemeral)
+4. Return `CallToolResult` with text content for success, `CallToolResult::error()` for failures
+5. Add test in `tests/server_tool_list_tests.rs` to verify tool registration
+6. Update the spec in `spec/matrix-mcp-v1-v2.yml`
+
+## Error Responses
+
+- Return `CallToolResult::error(message)` for operational errors
+- Never panic or unwrap in tool handlers
+- Include actionable context in error messages (room ID, what failed, why)
+
+## Testing
+
+- `SKIP_MATRIX_INIT=true cargo run` for protocol-only testing without a live Matrix server
+- Use MCP Inspector: `npx @modelcontextprotocol/inspector` -> `http://localhost:3000/mcp`
+- Integration tests use `wiremock` to mock homeserver responses

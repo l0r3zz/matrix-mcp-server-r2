@@ -1,0 +1,29 @@
+---
+description: Matrix MCP Server R2 project identity and architecture overview
+alwaysApply: true
+---
+
+# Matrix MCP Server R2 -- Project Context
+
+Rust rewrite of the TypeScript Matrix MCP server. Exposes ~20 Matrix operations as MCP tools via Streamable HTTP transport. Part of the Agent Matrix ecosystem.
+
+## Architecture
+
+- **Three-file core**: `main.rs` (Axum app, transport), `matrix/client.rs` (Matrix ops), `mcp/server.rs` (tool definitions)
+- **Streamable HTTP MCP**: rmcp's StreamableHttpService + LocalSessionManager at `/mcp`
+- **Shared Matrix client**: Single client with background sync (NOT per-tool ephemeral)
+- **TTL client cache**: 15-min TTL in `matrix/cache.rs`, primed for multi-identity
+
+## Key Versions (pin in all code)
+
+- `matrix-sdk` = 0.10 (rustls, optional e2e-encryption)
+- `ruma` = 0.12 (client-api-c, compat)
+- `rmcp` = 1.2 (server, streamable HTTP, macros)
+- `tokio` = 1.x, `axum` = 0.8, `thiserror` = 2.0
+- Rust edition 2021, MSRV 1.88
+
+## Related Resources
+
+- `reference/ts-source/` -- Frozen TypeScript implementation snapshot (do not modify)
+- `spec/matrix-mcp-v1-v2.yml` -- v1/v2 API spec
+- `.a0proj/instructions/project-instructions.md` -- Agent Zero project constraints

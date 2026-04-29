@@ -1,0 +1,41 @@
+---
+description: Matrix SDK client patterns, background sync, and client caching
+globs: "src/matrix/**/*.rs"
+alwaysApply: false
+---
+
+# Matrix Client Patterns
+
+## Client Lifecycle
+
+- Created in `matrix/client.rs` via `create_matrix_client`
+- Logs in with username/password from environment variables
+- Background sync loop runs via `start_background_sync` with backoff on errors
+- Client is shared across all tool invocations (not ephemeral per-request)
+
+## Client Cache (`matrix/cache.rs`)
+
+- Keyed by `userId:homeserverUrl`
+- 15-minute TTL with periodic cleanup task
+- Primed for multi-identity scenarios
+- `shutdownAllClients()` equivalent on process signals
+
+## Background Sync
+
+- Loops `sync_once` to keep room state fresh
+- Implements exponential backoff on sync errors
+- Essential for tools that read room state, messages, and members
+
+## SKIP_MATRIX_INIT Mode
+
+When `SKIP_MATRIX_INIT=true`:
+- Builds a stub client, skips real sync/cache wiring
+- MCP protocol works normally
+- Tool calls will hit connection/state errors
+- Used for MCP Inspector and protocol-only testing
+
+## Important Notes
+
+- Config includes OAuth/token exchange env vars but auth is minimal (planned, not implemented)
+- `rejectUnauthorized: false` equivalent for local dev TLS -- not production-safe
+- matrix-sdk 0.10 with rustls -- no OpenSSL dependency
