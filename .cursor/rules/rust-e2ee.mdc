@@ -175,10 +175,30 @@ These tools should follow the existing `#[tool(...)]` macro pattern in `src/mcp/
 - For agent-internal rooms, `TrustRequirement::Untrusted` is acceptable; for human-agent DMs, consider requiring device verification
 - Recovery keys must not be stored in plaintext in the container image; use mounted secrets or environment variables
 
+## E2EE Handshake Flow (Key Exchange Sequence)
+
+Understanding the handshake is critical for debugging. The 4-step key exchange:
+
+1. **keys/upload** (`/_matrix/client/v3/keys/upload`) -- publish device identity keys (Ed25519 + Curve25519) and one-time prekeys
+2. **keys/query** (`/_matrix/client/v3/keys/query`) -- fetch recipient device keys from the homeserver
+3. **keys/claim** (`/_matrix/client/v3/keys/claim`) -- claim a one-time key to bootstrap the Olm session (3DH)
+4. **m.room_key to-device** -- Megolm session key delivered encrypted per-device via Olm
+
+With `matrix-sdk` this is handled automatically during sync and `room.send()`. The relevant internal code paths in `matrix-rust-sdk` are:
+
+- `crates/matrix-sdk-crypto/src/machine.rs` -- `OlmMachine` state machine
+- `crates/matrix-sdk-crypto/src/olm/account.rs` -- one-time key management, Olm session creation
+- `crates/matrix-sdk-crypto/src/session_manager/group_sessions/` -- Megolm outbound session creation and key sharing
+- `crates/matrix-sdk-crypto/src/store/` -- key storage, session persistence (CryptoStore trait)
+- `crates/matrix-sdk-crypto/src/verification/` -- device verification (SAS, QR)
+
 ## References
 
+- Matrix E2EE spec: https://spec.matrix.org/latest/client-server-api/#end-to-end-encryption
+- Olm/Megolm protocol specs: https://gitlab.matrix.org/matrix-org/olm/-/tree/master/docs
 - matrix-sdk encryption module: https://matrix-org.github.io/matrix-rust-sdk/matrix_sdk/encryption/index.html
 - matrix-sdk-crypto tutorial: https://docs.rs/matrix-sdk-crypto/latest/matrix_sdk_crypto/tutorial/index.html
 - vodozemac repository: https://github.com/matrix-org/vodozemac
 - matrixbot-ezlogin (reference for bot E2EE bootstrap): https://github.com/m13253/matrixbot-ezlogin
 - Matrix E2EE implementation guide: https://matrix.org/docs/matrix-concepts/end-to-end-encryption
+- Trail of Bits audit (2022): https://matrix.org/blog/2022/05/16/independent-public-audit-of-vodozemac-a-native-rust-implementation-of-matrix-end-to-end-encryption

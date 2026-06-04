@@ -1,109 +1,83 @@
-# AGENTS.md -- Matrix MCP Server R2 (Rust)
+# DOX framework
 
-Rust rewrite of the TypeScript Matrix MCP server. Exposes ~20 Matrix operations as MCP tools via Streamable HTTP transport. Drop-in replacement for the TS version with planned E2EE support.
+- DOX is highly performant AGENTS.md hierarchy installed here
+- Agent must follow DOX instructions across any edits
 
-## Stack
+## Core Contract
 
-- **Language**: Rust (edition 2021, rust-version 1.88)
-- **Async**: Tokio
-- **HTTP**: Axum 0.8, Tower, tower-http (CORS, tracing)
-- **MCP**: rmcp 1.2 (StreamableHttpService + LocalSessionManager at `/mcp`)
-- **Matrix**: matrix-sdk 0.10 (rustls), ruma 0.12
-- **Schemas**: schemars, serde, serde_json
-- **Errors**: thiserror, anyhow
+- AGENTS.md files are binding work contracts for their subtrees
+- Work products, source materials, instructions, records, assets, and durable docs must stay understandable from the nearest applicable AGENTS.md plus every parent AGENTS.md above it
 
-## Key Commands
+## Read Before Editing
 
-```bash
-# Build
-cargo build                              # Debug
-cargo build --release                    # Release (LTO + strip enabled)
-cargo build --features e2ee              # With E2EE (planned)
+1. Read the root AGENTS.md
+2. Identify every file or folder you expect to touch
+3. Walk from the repository root to each target path
+4. Read every AGENTS.md found along each route
+5. If a parent AGENTS.md lists a child AGENTS.md whose scope contains the path, read that child and continue from there
+6. Use the nearest AGENTS.md as the local contract and parent docs for repo-wide rules
+7. If docs conflict, the closer doc controls local work details, but no child doc may weaken DOX
 
-# Run
-cargo run                                # Default: HTTP on port 3000
-cargo run -- --version                   # Show version
+Do not rely on memory. Re-read the applicable DOX chain in the current session before editing.
 
-# Test
-cargo test                               # All tests
-cargo test --test integration_tests      # Integration only
+## Update After Editing
 
-# Lint and format
-cargo clippy                             # Lints (warn level)
-cargo fmt                                # Rustfmt defaults
+Every meaningful change requires a DOX pass before the task is done.
 
-# Docker
-docker build -t matrix-mcp-server-r2 .
-docker run --env-file .env -p 3000:3000 matrix-mcp-server-r2
+Update the closest owning AGENTS.md when a change affects:
 
-# MCP Inspector (protocol testing without Matrix)
-SKIP_MATRIX_INIT=true cargo run
-# Then: npx @modelcontextprotocol/inspector -> http://localhost:3000/mcp
-```
+- purpose, scope, ownership, or responsibilities
+- durable structure, contracts, workflows, or operating rules
+- required inputs, outputs, permissions, constraints, side effects, or artifacts
+- user preferences about behavior, communication, process, organization, or quality
+- AGENTS.md creation, deletion, move, rename, or index contents
 
-## Project Structure
+Update parent docs when parent-level structure, ownership, workflow, or child index changes. Update child docs when parent changes alter local rules. Remove stale or contradictory text immediately. Small edits that do not change behavior or contracts may leave docs unchanged, but the DOX pass still must happen.
 
-```
-src/
-  main.rs              -- Axum app: /health, /mcp, graceful shutdown
-  lib.rs
-  config.rs            -- Config from env vars (OAuth/HTTPS/E2EE fields present but partial)
-  error.rs
-  auth.rs              -- MatrixAuthContext (minimal; from_config helper)
-  matrix/
-    client.rs          -- create_matrix_client, background sync loop with backoff
-    cache.rs           -- TTL client cache (15-min TTL, periodic cleanup)
-  mcp/
-    server.rs          -- MatrixMcpServer: #[tool_router], ~20 #[tool] methods
-tests/
-  config_tests.rs, cache_tests.rs, integration_tests.rs, server_tool_list_tests.rs
-spec/
-  matrix-mcp-v1-v2.yml              -- v1/v2 API spec
-  E2EE-Prep-Checklist-for-Rust-MCP-Server.md
-reference/
-  ts-source/           -- Snapshot of TypeScript implementation for reference
-  docs/                -- Plans, design, tools spec, ops manual
-.a0proj/instructions/project-instructions.md  -- Agent Zero project constraints
-.cursor/rules/rust-e2ee.mdc                   -- Cursor rule for E2EE feature gating
-```
+## Hierarchy
 
-## Configuration
+- Root AGENTS.md is the DOX rail: project-wide instructions, global preferences, durable workflow rules, and the top-level Child DOX Index
+- Child AGENTS.md files own domain-specific instructions and their own Child DOX Index
+- Each parent explains what its direct children cover and what stays owned by the parent
+- The closer a doc is to the work, the more specific and practical it must be
 
-Copy `.env.example` to `.env`. Key variables:
-- `MATRIX_HOMESERVER_URL` -- Matrix server URL
-- `MATRIX_USERNAME` / `MATRIX_PASSWORD` -- Login credentials
-- `RUST_LOG` -- Log level (e.g., `info`, `debug`)
-- `SKIP_MATRIX_INIT` -- Set `true` for protocol-only testing without Matrix
+## Child Doc Shape
 
-OAuth/HTTPS/E2EE env vars exist in config.rs but are partially implemented.
+- Create a child AGENTS.md when a folder becomes a durable boundary with its own purpose, rules, responsibilities, workflow, materials, or quality standards
+- Work Guidance must reflect the current standards of the project or user instructions; if there are no specific standards or instructions yet, leave it empty
+- Verification must reflect an existing check; if no verification framework exists yet, leave it empty and update it when one exists
 
-## Architecture Decisions
+Default section order:
+- Purpose
+- Ownership
+- Local Contracts
+- Work Guidance
+- Verification
+- Child DOX Index
 
-- **Streamable HTTP MCP**: Uses rmcp's StreamableHttpService (not raw SSE), mounted at `/mcp` on Axum
-- **Shared Matrix client**: Single client with background sync, NOT per-tool ephemeral clients
-- **TTL client cache**: 15-min TTL with cleanup task; primed for multi-identity scenarios
-- **SKIP_MATRIX_INIT**: Stub client for MCP Inspector / protocol testing without live Matrix
-- **Background sync**: Loops sync_once with backoff so room state stays fresh
-- **Tool macros**: `#[tool_router]` + `#[tool]` on impl blocks; camelCase JSON via serde rename
-- **No OAuth yet**: Config fields exist but auth.rs is minimal -- OAuth is planned, not implemented
-- **Release profile**: LTO + strip + codegen-units=1 for small/fast binary
+## Style
 
-## Boundaries
+- Keep docs concise, current, and operational
+- Document stable contracts, not diary entries
+- Put broad rules in parent docs and concrete details in child docs
+- Prefer direct bullets with explicit names
+- Do not duplicate rules across many files unless each scope needs a local version
+- Delete stale notes instead of explaining history
+- Trim obvious statements, repeated rules, misplaced detail, and warnings for risks that no longer exist
 
-### Always Do
-- Run `cargo clippy` and `cargo fmt` before committing
-- Run `cargo test` to verify nothing breaks
-- Use camelCase for tool input JSON fields (serde rename, matches TS/agent expectations)
-- Keep `reference/ts-source/` as-is for comparison -- don't modify it
+## Closeout
 
-### Ask First
-- Before adding new Cargo dependencies
-- Before modifying the MCP transport layer
-- Before changing tool API signatures (callers depend on them)
-- Before implementing E2EE (follow `spec/E2EE-Prep-Checklist-for-Rust-MCP-Server.md`)
+1. Re-check changed paths against the DOX chain
+2. Update nearest owning docs and any affected parents or children
+3. Refresh every affected Child DOX Index
+4. Remove stale or contradictory text
+5. Run existing verification when relevant
+6. Report any docs intentionally left unchanged and why
 
-### Never Do
-- Commit `.env` files with real credentials
-- Use `unwrap()` in tool implementations -- use proper error handling (thiserror/anyhow)
-- Break camelCase tool input naming convention
-- Modify `reference/` directory (it's a frozen snapshot)
+## User Preferences
+
+When the user requests a durable behavior change, record it here or in the relevant child AGENTS.md
+
+## Child DOX Index
+
+This project is not yet indexed. Before continuing you must scan the project, build the DOX tree and replace this message with the actual index. Go deep and scan files recursively to properly evaluate complexity and create nested DOX files where needed.

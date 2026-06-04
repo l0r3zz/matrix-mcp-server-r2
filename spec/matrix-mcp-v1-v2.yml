@@ -10,11 +10,22 @@ spec:
     - Make v1 tools refuse to operate on encrypted rooms with a clear upgrade hint.
     - Introduce v2 (-r2) tools that can handle both unencrypted and E2EE rooms via parameters.
     - Add explicit E2EE bootstrap/setup tools to manage device keys and crypto state.
+    - Define a concrete key management model for device identity, crypto store lifecycle, and recovery.
 
   non_goals:
     - Changing request/response shapes of v1 tools.
     - Auto-upgrading existing clients to E2EE without an explicit switch to -r2 tools.
     - Implementing full UX flows for human device verification or cross-signing.
+
+  operational_requirements:
+    - One persistent Matrix device identity per agent instance.
+    - Device identity and crypto store MUST survive restart and host migration.
+    - Crypto store MUST be isolated per agent instance (no shared key store).
+    - Logs MUST NOT contain plaintext key material or recovery secrets.
+    - v2 default trust policy is TOFU (trust-on-first-use).
+    - Strict verification policy is supported later and MUST NOT break TOFU default behavior.
+    - Backup secret resolution supports both secret-manager references and env-var names.
+    - Secret resolution precedence is request reference, then request env var, then server default.
 
 concepts:
   RoomId:
@@ -34,12 +45,44 @@ concepts:
     enum: ["none", "e2ee"]
     default: "none"
 
+  TrustPolicy:
+    description: >
+      Device trust behavior for E2EE operations.
+      "tofu" is default in v2.
+      "strict" is optional and may fail operations on unverified devices.
+    type: string
+    enum: ["tofu", "strict"]
+    default: "tofu"
+
+  DeviceId:
+    description: Stable Matrix device identifier used by the MCP server.
+    type: string
+
+  CryptoStoreState:
+    description: Health/status of the local Olm/Megolm crypto store.
+    type: string
+    enum: ["missing", "ready", "corrupt", "unreadable", "recreated"]
+
   EncryptedRoomError:
     description: >
       Standardized error for v1 tools when they are invoked on an encrypted room.
       Error code MUST match the existing mjknowles server.
       Error message MUST be:
       `room is encrypted; use *-r2 tools instead`
+
+  CryptoNotBootstrappedError:
+    description: >
+      Returned by v2 tools when encryption_mode is "e2ee" but bootstrap has not
+      completed for this MCP device.
+
+  KeyStoreUnavailableError:
+    description: >
+      Returned when local crypto store cannot be read or initialized.
+
+  MissingRoomKeyError:
+    description: >
+      Returned when room is encrypted and ciphertext is present, but the room
+      decryption key is not yet available for this device.
 
 apis:
   v1:
@@ -129,8 +172,7 @@ apis:
                   timestamp: { type: string, format: date-time }
         error_behavior:
           - If room is encrypted, do not attempt to decrypt.
-          - Return EncryptedRoomError with the existing error code and message:
-            "room is encrypted; use *-r2 tools instead".
+          - Return EncryptedRoomError with the existing error code and message "room is encrypted; use *-r2 tools instead".
 
       send-message:
         name: send-message
@@ -151,6 +193,10 @@ apis:
     description: >
       Extended tools that add E2EE support while remaining compatible with v1 semantics.
       Tools are named with a -r2 suffix and include an optional encryption_mode parameter.
+      v2 key management baseline:
+      - One persistent device per agent instance.
+      - Persistent crypto store for Olm/Megolm state.
+      - Explicit bootstrap and health/status reporting.
 
     tools:
 
@@ -167,17 +213,45 @@ apis:
               default: false
               description: >
                 If true, clear and recreate local crypto store and re-upload keys.
+            trustPolicy:
+              $ref: "#/concepts/TrustPolicy"
+            backupPassphraseEnvVar:
+              type: string
+              nullable: true
+              description: >
+                Name of env var that holds encrypted backup passphrase.
+                Pass variable name only, never raw secret value.
+            backupPassphraseRef:
+              type: string
+              nullable: true
+              description: >
+                Optional reference to a secret manager entry for encrypted backup/restore.
+                Never pass raw secrets in tool arguments.
         response:
           type: object
           properties:
             deviceId:
-              type: string
+              $ref: "#/concepts/DeviceId"
             identityKey:
               type: string
             olmEnabled:
               type: boolean
+            cryptoStoreState:
+              $ref: "#/concepts/CryptoStoreState"
+            uploadedOneTimeKeys:
+              type: integer
+            backupConfigured:
+              type: boolean
+            resolvedBackupSource:
+              type: string
+              enum: ["none", "secret_manager_ref", "env_var", "server_default"]
+            trustPolicy:
+              $ref: "#/concepts/TrustPolicy"
             notes:
               type: string
+        error_behavior:
+          - If local crypto store cannot be opened, return KeyStoreUnavailableError.
+          - If strict trust is requested but verification prerequisites are not met, return a structured trust-policy error.
 
       create-room-r2:
         name: create-room-r2
@@ -201,6 +275,10 @@ apis:
             roomId: { $ref: "#/concepts/RoomId" }
             encryptionEnabled:
               type: boolean
+            usingDeviceId:
+              $ref: "#/concepts/DeviceId"
+        error_behavior:
+          - If encryption_mode is "e2ee" and bootstrap is incomplete, return CryptoNotBootstrappedError.
 
       send-message-r2:
         name: send-message-r2
@@ -218,6 +296,11 @@ apis:
             eventId: { type: string }
             encrypted:
               type: boolean
+            usingDeviceId:
+              $ref: "#/concepts/DeviceId"
+        error_behavior:
+          - If encryption_mode is "e2ee" and bootstrap is incomplete, return CryptoNotBootstrappedError.
+          - If encryption_mode is "e2ee" and crypto store is unavailable, return KeyStoreUnavailableError.
 
       get-room-messages-r2:
         name: get-room-messages-r2
@@ -241,7 +324,44 @@ apis:
                   sender:    { $ref: "#/concepts/UserId" }
                   body:      { type: string }
                   encrypted: { type: boolean }
+                  decryptionState:
+                    type: string
+                    enum: ["not_encrypted", "decrypted", "missing_key", "failed"]
                   timestamp: { type: string, format: date-time }
+        error_behavior:
+          - If room is encrypted and keys are unavailable, return MissingRoomKeyError or mark per-message decryptionState.
+          - If crypto store is unavailable, return KeyStoreUnavailableError.
+
+      get-encryption-status-r2:
+        name: get-encryption-status-r2
+        summary: Report room/device encryption readiness and key-management health.
+        request:
+          type: object
+          properties:
+            roomId:
+              $ref: "#/concepts/RoomId"
+        response:
+          type: object
+          properties:
+            roomId:
+              $ref: "#/concepts/RoomId"
+            roomEncrypted:
+              type: boolean
+            bootstrapped:
+              type: boolean
+            deviceId:
+              $ref: "#/concepts/DeviceId"
+            cryptoStoreState:
+              $ref: "#/concepts/CryptoStoreState"
+            canDecryptNow:
+              type: boolean
+            trustPolicy:
+              $ref: "#/concepts/TrustPolicy"
+            backupSourceConfigured:
+              type: string
+              enum: ["none", "secret_manager_ref", "env_var", "server_default"]
+            notes:
+              type: string
 
 tests:
   v1_compat:
@@ -256,6 +376,11 @@ tests:
       New -r2 tools must pass additional E2EE scenarios:
       - Agent-internal encrypted room creation and messaging.
       - Refusal of v1 tools on encrypted rooms with EncryptedRoomError.
+      - After MCP restart, previously encrypted room messages remain decryptable.
+      - After host migration with restored crypto store, decryption still works.
+      - If crypto store is lost, v2 returns structured key-management errors.
+      - bootstrap-e2ee-r2 resolves backup secret source with documented precedence.
+      - trustPolicy defaults to tofu when omitted.
 
 # You can now:
 # Use get-room-info as a template for the other v1 tools in your test plan (users, notifications, etc.).

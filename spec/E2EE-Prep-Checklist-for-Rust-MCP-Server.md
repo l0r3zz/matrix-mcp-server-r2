@@ -212,4 +212,91 @@ In *Applied Cryptography* (any edition), skim these areas for conceptual groundi
   - [ ] On send in `*-r2`: call the SDK’s encryption functions when needed.
   - [ ] On receive in `*-r2`: attempt decryption, handle failures per spec.
 
+---
+
+## 7. Key Management Decisions (Required Before v2 Coding)
+
+This section turns "E2EE support" into an operational key management model.
+If these are not decided up front, E2EE behavior will be fragile in production.
+- [ ] Read `spec/E2EE-Key-Management-Model.md` before implementation planning.
+
+### 7.1 Device Identity Model
+
+- [ ] Decide and document the MCP server device model:
+  - [ ] One persistent Matrix device per agent instance (recommended).
+  - [ ] Device ID must be deterministic per instance (stable across restarts).
+  - [ ] Device ID must NOT be shared across different agents.
+- [ ] Decide trust mode for first release:
+  - [x] TOFU (trust on first use) for agent-human DMs.
+  - [x] Strict verification mode deferred to later release.
+
+### 7.2 Crypto Store Model
+
+- [ ] Decide persistent crypto store location (inside container + mounted volume):
+  - [ ] Store survives container restart and host reboot.
+  - [ ] Store is isolated per agent instance (no shared store directory).
+- [ ] Define file permissions and ownership requirements:
+  - [ ] Least-privilege access only for the MCP process user.
+- [ ] Define corruption handling:
+  - [ ] Detect unreadable/corrupt store.
+  - [ ] Return structured error (`KeyStoreUnavailableError` or similar).
+  - [ ] Document break-glass flow (`forceRecreate: true`) and tradeoffs.
+
+### 7.3 Key Lifecycle
+
+- [ ] Bootstrap lifecycle:
+  - [ ] First run creates crypto store and local device keys.
+  - [ ] Upload device keys and one-time keys.
+  - [ ] Return status that indicates bootstrap completeness.
+- [ ] Runtime lifecycle:
+  - [ ] Process sync continuously so key updates and to-device events are consumed.
+  - [ ] Replenish one-time keys when low.
+- [ ] Rotation lifecycle:
+  - [ ] Routine session/key rotation follows Matrix SDK defaults.
+  - [ ] Manual "recreate device" path is explicit, audited, and rare.
+
+### 7.4 Backup, Restore, and Migration
+
+- [ ] Define backup policy for crypto material:
+  - [ ] Backup crypto store in encrypted form only.
+  - [ ] Never log plaintext key material.
+  - [ ] Backup retention and access policy documented.
+- [ ] Define restore behavior:
+  - [ ] Restoring same crypto store preserves ability to decrypt old room messages.
+  - [ ] Fresh device (without old store) must be treated as a new trust identity.
+- [ ] Define host migration requirement:
+  - [ ] Migration runbook must include crypto store copy + integrity check.
+  - [ ] If store is not migrated, expected data-loss scope is documented.
+- [ ] Define backup secret input strategy:
+  - [x] Support secret manager reference input (`backupPassphraseRef`).
+  - [x] Support environment variable name input (`backupPassphraseEnvVar`).
+  - [ ] Document precedence and fallback behavior in API spec and operations docs.
+
+### 7.5 Tool-Level Requirements (v2 API)
+
+- [ ] `bootstrap-e2ee-r2` must report key-management state:
+  - [ ] `deviceId`
+  - [ ] `identityKey`
+  - [ ] `cryptoStoreState` (for example: `ready`, `missing`, `corrupt`)
+  - [ ] `uploadedOneTimeKeys`
+  - [ ] `backupConfigured`
+- [ ] Add `get-encryption-status-r2`:
+  - [ ] Reports encryption status for room + device + store.
+  - [ ] Distinguishes "room is encrypted" from "device cannot decrypt yet".
+- [ ] `send-message-r2` and `get-room-messages-r2` must return structured errors:
+  - [ ] `CryptoNotBootstrappedError`
+  - [ ] `MissingRoomKeyError`
+  - [ ] `UnverifiedDeviceError` (if strict mode enabled in future)
+
+### 7.6 Acceptance Tests for Key Management
+
+- [ ] Restart test:
+  - [ ] After MCP restart, encrypted room messages remain decryptable.
+- [ ] Migration test:
+  - [ ] After host migration with restored crypto store, decryption still works.
+- [ ] Store loss test:
+  - [ ] If crypto store is intentionally removed, API returns expected errors and recovery guidance.
+- [ ] v1 isolation test:
+  - [ ] v1 tools still fail encrypted rooms with `EncryptedRoomError` unchanged.
+
 
