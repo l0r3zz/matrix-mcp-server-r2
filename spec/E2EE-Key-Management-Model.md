@@ -9,19 +9,19 @@ Its goal is to explain, in plain language, how keys should be managed for v2 E2E
 
 ---
 
-## 0. Locked Decisions (Current)
+## 0. Locked Decisions (2026-10-23)
 
-These decisions are now explicit in the spec:
+These decisions replace the earlier TOFU default. The October spec is `.specify/specs/002-e2ee-cross-signing/spec.md`.
 
-- **Default trust policy for v2:** `tofu`
-- **Secondary trust policy:** `strict` (optional, later hardening path)
-- **Backup secret input:** support both:
-  - secret manager reference (`backupPassphraseRef`)
-  - environment variable name (`backupPassphraseEnvVar`)
-- **Backup secret precedence:**
-  1. `backupPassphraseRef`
-  2. `backupPassphraseEnvVar`
-  3. server default fallback configuration
+- **Trust policy:** `cross-signed` only. There is no `tofu` mode and no `strict` opt-in.
+- **Room keys:** do not send room keys or other encrypted to-device secrets to a device that is not cross-signed. Withhold with `m.room_key.withheld` / `m.unverified` via `matrix-sdk` 0.19 recipient settings.
+- **Recovery secret input:** secret manager reference, environment variable name, or file path. Never a raw secret in an MCP argument, log line, or tool result.
+- **Recovery secret precedence:**
+  1. `backupPassphraseRef` (secret manager)
+  2. `backupPassphraseEnvVar` (name only)
+  3. `MATRIX_RECOVERY_KEY_FILE` (path on the store volume)
+- **SDK:** `matrix-sdk` 0.19.x, Rust >= 1.96. `matrix-sdk-crypto` >= 0.16.1 (CVE-2026-45056).
+- **Device id:** one id per agent, stored in the crypto-store directory. The literal `MCP_SERVER` is not allowed.
 
 Raw secret values must never be passed in MCP tool arguments.
 
@@ -32,7 +32,9 @@ Raw secret values must never be passed in MCP tool arguments.
 Use this as the source-of-truth behavior for `bootstrap-e2ee-r2`:
 
 ```python
-trust_policy = request.get("trustPolicy", "tofu")
+trust_policy = request.get("trustPolicy", "cross-signed")
+if trust_policy != "cross-signed":
+    raise TrustPolicyNotSatisfiedError("only cross-signed is supported")
 
 if request.get("backupPassphraseRef"):
     passphrase = secrets.get(request["backupPassphraseRef"])
@@ -40,12 +42,15 @@ if request.get("backupPassphraseRef"):
 elif request.get("backupPassphraseEnvVar"):
     passphrase = env.get(request["backupPassphraseEnvVar"])
     source = "env_var"
+elif env.get("MATRIX_RECOVERY_KEY_FILE"):
+    passphrase = read_file(env["MATRIX_RECOVERY_KEY_FILE"])
+    source = "recovery_key_file"
 else:
-    passphrase = config.default_backup_passphrase
-    source = "server_default" if passphrase else "none"
+    passphrase = None
+    source = "none"
 
-if trust_policy == "strict" and not verification_prereqs_ready():
-    raise TrustPolicyNotSatisfiedError("strict policy prerequisites not met")
+if source != "none" and not passphrase:
+    raise SecretResolutionError("recovery secret could not be resolved")
 ```
 
 Implementation notes:
@@ -75,9 +80,11 @@ If any one of these is lost, decryption behavior changes:
 
 At implementation level (managed by Matrix SDK crypto), you will encounter:
 
-- **Device identity keys** (long-lived per device)
+- **Device identity keys** (Ed25519 and Curve25519, long-lived per device)
+- **Cross-signing keys** (master, self-signing, user-signing), held in Secret Storage
 - **One-time keys** (consumed for session setup)
 - **Megolm room/session keys** (group message encryption/decryption)
+- **Key backup decryption key**, unlocked by the recovery key so history from before this device existed can be restored
 
 The MCP server should not invent custom crypto primitives. It should rely on Matrix SDK behavior and expose state clearly through `-r2` tools.
 
@@ -97,10 +104,12 @@ The MCP server should not invent custom crypto primitives. It should rely on Mat
 - Store is isolated per agent instance.
 - File permissions must allow only the MCP service user.
 
-### 3.3 Trust Mode for First Release
+### 3.3 Trust Mode
 
-- Default: TOFU style trust for operational simplicity.
-- Strict verification can be added later (do not block v2 rollout on full UX).
+- The only mode is cross-signing. A device that is not cross-signed does not receive room keys.
+- TOFU, "trust all", and `ignore_unverified_devices` are out of scope. Those are what `elkimek/matrix-bridge` and `elkimek/matrix-e2ee-bridge` do, and they do not meet this fleet's secure-network requirement.
+- Headless setup follows `jlxq0/matrix-mcp` and `Just-Insane/matrix-mcp-server`: restore Secret Storage with a recovery key, or create cross-signing once when the account has none. Do not reset an existing cross-signing identity.
+- Interactive emoji comparison (`qechris/matrix-mcp`) is a useful pattern for a human operator and is not required for agent bootstrap.
 
 ---
 
@@ -108,11 +117,13 @@ The MCP server should not invent custom crypto primitives. It should rely on Mat
 
 ### 4.1 First Bootstrap
 
-1. MCP starts.
-2. Check for existing crypto store.
-3. If missing, initialize store and device keys.
-4. Upload device keys and one-time keys.
-5. Return status via `bootstrap-e2ee-r2`.
+1. MCP starts and opens the persistent store.
+2. Load or create `.device-id` in that directory. Never use the shared literal `MCP_SERVER`.
+3. Upload device keys only after the device id and store agree.
+4. If a recovery secret resolves, import cross-signing from Secret Storage and restore key backup.
+5. If the account has no cross-signing identity, create one and write the new recovery key to a mode-0600 file on the store volume. Do not put that key in the tool response.
+6. If an identity already exists and no recovery secret resolves, fail. Do not invent a second identity.
+7. Return status via `bootstrap-e2ee-r2` (`crossSigned`, `deviceId`, `backupConfigured`, `resolvedBackupSource`). Do not return the secret.
 
 Expected output includes:
 
@@ -179,11 +190,12 @@ Should report:
 
 - `deviceId`
 - `identityKey`
+- `crossSigned`
 - `cryptoStoreState`
 - `uploadedOneTimeKeys`
 - `backupConfigured`
 - `resolvedBackupSource`
-- `trustPolicy`
+- `trustPolicy` (`cross-signed` only; do not return the recovery key)
 
 ### 7.2 `get-encryption-status-r2`
 

@@ -12,13 +12,12 @@ This is `matrix-mcp-server-r2`, a Rust MCP (Model Context Protocol) server provi
 
 ### Crate Versions (pin these in all code and suggestions)
 
-- `matrix-sdk` = 0.10 (with feature `e2e-encryption` via the `e2ee` Cargo feature flag)
-- `ruma` = 0.12 (with features `client-api-c`, `compat`)
-- `rmcp` = 1.2 (MCP SDK)
-- `tokio` = 1.43 (async runtime)
-- `axum` = 0.8 (HTTP framework)
-- `thiserror` = 2.0 (error types)
-- Rust edition = 2021, MSRV = 1.88
+- E2EE target: `matrix-sdk` 0.19.x, Rust >= 1.96, `e2e-encryption` + `bundled-sqlite`
+- Crypto floor: `matrix-sdk-crypto` >= 0.16.1 (CVE-2026-45056). The 0.19 line meets this
+- `rmcp` stays 1.2 for this feature. Do not mix in the 3.x migration
+- `ruma` follows `matrix-sdk` 0.19. Do not keep an independent 0.12 pin after the bump
+- `tokio` 1.x, `axum` 0.8, `thiserror` 2.0, edition 2021
+- The tree still compiles against `matrix-sdk` 0.10 until tasks.md T001 flips the pin. New E2EE code must target 0.19, not 0.10 APIs such as `Client::builder().sqlite_store(...)`
 
 ### Feature Flag
 
@@ -62,7 +61,8 @@ When the `e2e-encryption` feature is enabled, `matrix-sdk` handles encryption **
 
 - All async code runs on Tokio 1.x multi-threaded runtime
 - Use `tokio::sync::Mutex` (not `std::sync::Mutex`) when a lock must be held across `.await` points
-- The OlmMachine requires locking for `outgoing_requests()`, `get_missing_sessions()`, and `share_room_key()` to prevent duplicate requests -- use a dedicated `tokio::sync::Mutex<()>` guard per the matrix-sdk-crypto tutorial
+- Do not construct a standalone `OlmMachine` beside `Client`. On 0.19 the client owns the crypto store, sync, and room-key sharing
+- Set decryption settings and the room-key recipient strategy so keys go only to cross-signed devices. Never pass `TrustRequirement::Untrusted`
 
 ### Error Handling
 
@@ -105,15 +105,11 @@ pub async fn bootstrap_e2ee(&self) -> Result<CallToolResult, McpError> {
 
 ### Client Builder with Crypto Store
 
-When E2EE is enabled, the client must use a persistent store:
-```rust
-#[cfg(feature = "e2ee")]
-let client = Client::builder()
-    .homeserver_url(homeserver_url)
-    .sqlite_store("/data/crypto-store", None)  // passphrase optional
-    .build()
-    .await?;
-```
+On `matrix-sdk` 0.19, enable `e2e-encryption` and `bundled-sqlite`. Open one store directory per agent. Read or create `.device-id` in that directory before restoring the session. Do not pass the literal `MCP_SERVER`.
+
+Confirm the builder method names against the 0.19 docs at implementation time (`StoreConfig`, `with_decryption_settings`, `with_room_key_recipient_strategy`). The 0.10 `.sqlite_store(path, None)` call is not the pattern to copy.
+
+Recipient strategy must exclude devices that are not cross-signed.
 
 ### Creating Encrypted Rooms
 
@@ -172,7 +168,8 @@ These tools should follow the existing `#[tool(...)]` macro pattern in `src/mcp/
 - Never log encryption keys, session tokens, or decrypted content at INFO level; use DEBUG or TRACE only behind `RUST_LOG`
 - The SQLite crypto store file path should be configurable via environment variable (e.g., `CRYPTO_STORE_PATH`)
 - The Feb 2026 vodozemac Olm 3DH disclosure is noted but not practically exploitable under Matrix's authenticated key distribution model
-- For agent-internal rooms, `TrustRequirement::Untrusted` is acceptable; for human-agent DMs, consider requiring device verification
+- Trust policy is cross-signed only. Do not implement TOFU or `ignore_unverified_devices`
+- Canonical spec: `.specify/specs/002-e2ee-cross-signing/spec.md`
 - Recovery keys must not be stored in plaintext in the container image; use mounted secrets or environment variables
 
 ## E2EE Handshake Flow (Key Exchange Sequence)

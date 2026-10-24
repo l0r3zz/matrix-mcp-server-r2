@@ -15,7 +15,8 @@ spec:
   non_goals:
     - Changing request/response shapes of v1 tools.
     - Auto-upgrading existing clients to E2EE without an explicit switch to -r2 tools.
-    - Implementing full UX flows for human device verification or cross-signing.
+    - Interactive emoji or QR verification UX. Headless cross-signing via a recovery key is in scope.
+    - Trust-on-first-use. Room keys are not shared with devices that are not cross-signed.
 
   operational_requirements:
     - One persistent Matrix device identity per agent instance.
@@ -47,12 +48,12 @@ concepts:
 
   TrustPolicy:
     description: >
-      Device trust behavior for E2EE operations.
-      "tofu" is default in v2.
-      "strict" is optional and may fail operations on unverified devices.
+      Fixed trust policy for v2. Room keys and other encrypted to-device
+      secrets go only to cross-signed devices (Matrix spec v1.18).
+      "tofu" is rejected.
     type: string
-    enum: ["tofu", "strict"]
-    default: "tofu"
+    enum: ["cross-signed"]
+    default: "cross-signed"
 
   DeviceId:
     description: Stable Matrix device identifier used by the MCP server.
@@ -244,14 +245,15 @@ apis:
               type: boolean
             resolvedBackupSource:
               type: string
-              enum: ["none", "secret_manager_ref", "env_var", "server_default"]
+              enum: ["none", "secret_manager_ref", "env_var", "recovery_key_file"]
             trustPolicy:
               $ref: "#/concepts/TrustPolicy"
             notes:
               type: string
         error_behavior:
           - If local crypto store cannot be opened, return KeyStoreUnavailableError.
-          - If strict trust is requested but verification prerequisites are not met, return a structured trust-policy error.
+          - If trustPolicy is anything other than "cross-signed", return a structured trust-policy error.
+          - If this device is not cross-signed, do not upload room keys to unverified devices. Return a structured error telling the operator to restore or create the recovery key.
 
       create-room-r2:
         name: create-room-r2
@@ -359,7 +361,7 @@ apis:
               $ref: "#/concepts/TrustPolicy"
             backupSourceConfigured:
               type: string
-              enum: ["none", "secret_manager_ref", "env_var", "server_default"]
+              enum: ["none", "secret_manager_ref", "env_var", "recovery_key_file"]
             notes:
               type: string
 
@@ -380,7 +382,9 @@ tests:
       - After host migration with restored crypto store, decryption still works.
       - If crypto store is lost, v2 returns structured key-management errors.
       - bootstrap-e2ee-r2 resolves backup secret source with documented precedence.
-      - trustPolicy defaults to tofu when omitted.
+      - trustPolicy is cross-signed. Omitting it means cross-signed. Passing tofu is an error.
+      - A device that is not cross-signed does not receive room keys.
+      - Acceptance homeserver is Continuwuity. First gate is an encrypted group room.
 
 # You can now:
 # Use get-room-info as a template for the other v1 tools in your test plan (users, notifications, etc.).

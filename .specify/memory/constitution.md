@@ -1,14 +1,14 @@
 # Constitution: matrix-mcp-server-r2
 
 **Created**: 2026-05-11
-**Last Updated**: 2026-05-11
+**Last Updated**: 2026-10-23
 
 ## Project Identity
 
-matrix-mcp-server-r2 is a Rust MCP (Model Context Protocol) server that exposes
-Matrix homeserver functionality as MCP tools to AI agents. It is a component of the
-Agent-Matrix sovereign agent fleet. The server is a drop-in replacement for the
-TypeScript matrix-mcp-server and adds E2EE support as its primary differentiator.
+matrix-mcp-server-r2 is the primary Matrix MCP server for the Agent-Matrix fleet.
+It exposes Matrix homeserver functionality as MCP tools to AI agents on secure
+(non-public) networks. E2EE is cross-signed only. The October spec is
+`.specify/specs/002-e2ee-cross-signing/spec.md`. The May spec `001-e2ee-support` is superseded.
 
 ## Non-Negotiable Principles
 
@@ -46,7 +46,8 @@ of the SDK, not crypto implementors.
 - Never log encryption keys, session tokens, or decrypted message content at INFO
   level or above
 - Crypto store paths must be configurable via environment variables
-- Recovery keys must never be stored in plaintext in container images
+- Recovery keys must never be stored in plaintext in container images, logs, or MCP tool results
+- Room keys go only to cross-signed devices. TOFU is not a supported policy
 - All tool responses involving encrypted content must clearly indicate encryption
   status
 
@@ -90,11 +91,12 @@ acceptance criteria. Both artifacts must remain consistent.
 
 | Component | Choice | Version |
 |-----------|--------|---------|
-| Language | Rust | 2021 edition, MSRV 1.88 |
-| MCP SDK | rmcp | 1.2 |
+| Language | Rust | 2021 edition. E2EE target MSRV 1.96. Compiling pin is still 1.88 until the 0.19 migration |
+| MCP SDK | rmcp | 1.2 (do not bump to 3.x as part of E2EE) |
 | HTTP | axum + tower-http | 0.8 / 0.6 |
-| Matrix SDK | matrix-sdk | 0.10 |
-| Matrix types | ruma | 0.12 |
+| Matrix SDK | matrix-sdk | E2EE target 0.19.x with `e2e-encryption` and `bundled-sqlite`. Compiling pin is still 0.10 |
+| Crypto floor | matrix-sdk-crypto | >= 0.16.1 (included in 0.19; CVE-2026-45056) |
+| Matrix types | ruma | Follows matrix-sdk 0.19. Do not keep an independent 0.12 pin after the bump |
 | Serialization | serde + schemars | 1.0 / 1 |
 | Error handling | thiserror | 2.0 |
 | Logging | tracing + tracing-subscriber | 0.1 / 0.3 |
@@ -136,4 +138,6 @@ spec/
 - Parent project: Agent-Matrix sovereign agent fleet
 - API contract: `spec/matrix-mcp-v1-v2.yml`
 - Cursor rules: `.cursor/rules/rust-e2ee.mdc`
-- Research: Cursor-Writing-Assistant-repo `outputs/research/research_e2ee_mcp_landscape_20260402_0206Z.md`
+- October E2EE spec: `.specify/specs/002-e2ee-cross-signing/spec.md`
+- Landscape review: `spec/E2EE-Landscape-Review-October-20261023.md` (earlier snapshot: `spec/E2EE-Landscape-Review-20261023.md`)
+- Key model: `spec/E2EE-Key-Management-Model.md`
