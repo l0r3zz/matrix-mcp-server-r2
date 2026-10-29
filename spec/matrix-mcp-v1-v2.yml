@@ -1,32 +1,32 @@
 spec:
   name: matrix-mcp-server-r2
+  version: "2.0.0"
   summary: >
-    MCP server that exposes Matrix homeserver functionality for agents, with
-    v1-compatible tools for unencrypted rooms and v2 (-r2) tools that add E2EE
-    support and explicit crypto setup.
+    Unified Matrix MCP gateway for the Agent-Matrix fleet. Exposes 20 operational
+    Matrix tools that transparently support Cross-Signed E2EE by default (with
+    automatic pre-flight /keys/query fallback to unencrypted rooms when an
+    invitee lacks cross-signed E2EE keys), plus 2 E2EE management/diagnostic
+    tools (bootstrap-e2ee and get-encryption-status).
 
   goals:
-    - Provide drop-in API compatibility with mjknowles/matrix-mcp-server for existing tools.
-    - Make v1 tools refuse to operate on encrypted rooms with a clear upgrade hint.
-    - Introduce v2 (-r2) tools that can handle both unencrypted and E2EE rooms via parameters.
-    - Add explicit E2EE bootstrap/setup tools to manage device keys and crypto state.
-    - Define a concrete key management model for device identity, crypto store lifecycle, and recovery.
+    - Provide seamless E2EE-by-default on the existing 20 MCP tool names so external clients require zero tool-name changes.
+    - Default create-room and send-direct-message to encryptionMode="auto" (pre-flight /keys/query enables E2EE when invitees have cross-signed keys, and falls back to an unencrypted room when an invitee lacks E2EE keys).
+    - Handle encrypted and unencrypted rooms transparently in send-message, get-room-messages, get-messages-by-date, and identify-active-users.
+    - Automatically bootstrap device keys and cross-signing at server startup when E2EE_ENABLED=true, while exposing bootstrap-e2ee and get-encryption-status for explicit operator control.
+    - Serve as the single Matrix client and SQLite crypto store owner per agent container (supporting Stage 2 absorption of matrix-bot into src/bot/).
 
   non_goals:
-    - Changing request/response shapes of v1 tools.
-    - Auto-upgrading existing clients to E2EE without an explicit switch to -r2 tools.
+    - Splitting tools into duplicate -r2 variants or refusing encrypted rooms with EncryptedRoomError.
     - Interactive emoji or QR verification UX. Headless cross-signing via a recovery key is in scope.
-    - Trust-on-first-use. Room keys are not shared with devices that are not cross-signed.
+    - Trust-on-first-use (TOFU) inside encrypted rooms. Room keys are never shared with devices that are not cross-signed.
 
   operational_requirements:
-    - One persistent Matrix device identity per agent instance.
+    - One persistent Matrix device identity (.device-id aligned with /_matrix/client/v3/account/whoami) and one SQLite crypto store per agent instance.
     - Device identity and crypto store MUST survive restart and host migration.
-    - Crypto store MUST be isolated per agent instance (no shared key store).
-    - Logs MUST NOT contain plaintext key material or recovery secrets.
-    - v2 default trust policy is TOFU (trust-on-first-use).
-    - Strict verification policy is supported later and MUST NOT break TOFU default behavior.
-    - Backup secret resolution supports both secret-manager references and env-var names.
-    - Secret resolution precedence is request reference, then request env var, then server default.
+    - Crypto store MUST be isolated per agent instance and locked against concurrent multi-process access.
+    - Logs and MCP tool responses MUST NOT contain plaintext key material, passwords, or recovery secrets.
+    - Inside encrypted rooms, trust policy is strictly cross-signed (Matrix spec v1.18 / MSC4153). TOFU is rejected.
+    - Backup secret resolution supports secret-manager references, env-var names, and MATRIX_RECOVERY_KEY_FILE in strict precedence order.
 
 concepts:
   RoomId:
@@ -39,16 +39,20 @@ concepts:
 
   EncryptionMode:
     description: >
-      How messages/rooms should be handled in r2 tools.
-      "none" = unencrypted (v1 behavior).
-      "e2ee" = create/use end-to-end encrypted rooms and messages.
+      How room creation encryption should be handled in create-room and send-direct-message.
+      "auto" = Pre-flight query /_matrix/client/v3/keys/query for invitees; create an encrypted
+               room if all invitees have cross-signed E2EE keys (or no invitees are specified),
+               or automatically fall back to an unencrypted room if an invitee lacks E2EE keys
+               (network/federation errors fail closed).
+      "e2ee" = Require end-to-end encryption; fail if any invitee lacks cross-signed E2EE keys.
+      "none" = Explicitly create an unencrypted room.
     type: string
-    enum: ["none", "e2ee"]
-    default: "none"
+    enum: ["auto", "e2ee", "none"]
+    default: "auto"
 
   TrustPolicy:
     description: >
-      Fixed trust policy for v2. Room keys and other encrypted to-device
+      Fixed trust policy inside encrypted rooms. Room keys and other encrypted to-device
       secrets go only to cross-signed devices (Matrix spec v1.18).
       "tofu" is rejected.
     type: string
@@ -56,104 +60,141 @@ concepts:
     default: "cross-signed"
 
   DeviceId:
-    description: Stable Matrix device identifier used by the MCP server.
+    description: Stable Matrix device identifier bound to the session and stored in $CRYPTO_STORE_PATH/.device-id.
     type: string
 
   CryptoStoreState:
-    description: Health/status of the local Olm/Megolm crypto store.
+    description: Health/status of the local Olm/Megolm SQLite crypto store.
     type: string
-    enum: ["missing", "ready", "corrupt", "unreadable", "recreated"]
+    enum: ["missing", "ready", "corrupt", "unreadable"]
 
-  EncryptedRoomError:
+  KeyBackupRestoreState:
+    description: Progress of historical room-key backup restoration.
+    type: string
+    enum: ["not_started", "running", "done", "failed"]
+
+  DecryptionState:
+    description: Per-message decryption status when reading room history.
+    type: string
+    enum: ["not_encrypted", "decrypted", "missing_key", "failed"]
+
+  TrustPolicyNotSatisfiedError:
     description: >
-      Standardized error for v1 tools when they are invoked on an encrypted room.
-      Error code MUST match the existing mjknowles server.
-      Error message MUST be:
-      `room is encrypted; use *-r2 tools instead`
+      Returned when caller passes a trustPolicy other than "cross-signed", or requests
+      encryptionMode="e2ee" for an invitee without cross-signed E2EE keys, or when this
+      device is not cross-signed.
+
+  SecretResolutionError:
+    description: >
+      Returned when a configured recovery secret source cannot be resolved.
+
+  IdentityExistsError:
+    description: >
+      Returned during bootstrap when the account already has a cross-signing identity
+      on the homeserver and no recovery secret was available to unlock it.
 
   CryptoNotBootstrappedError:
     description: >
-      Returned by v2 tools when encryption_mode is "e2ee" but bootstrap has not
-      completed for this MCP device.
+      Returned when an encrypted operation is requested before E2EE bootstrap has completed.
 
   KeyStoreUnavailableError:
     description: >
-      Returned when local crypto store cannot be read or initialized.
-
-  MissingRoomKeyError:
-    description: >
-      Returned when room is encrypted and ciphertext is present, but the room
-      decryption key is not yet available for this device.
+      Returned when the local SQLite crypto store cannot be opened or is locked by another process.
 
 apis:
-  v1:
+  unified:
     description: >
-      Tools that match mjknowles/matrix-mcp-server behavior exactly.
-      These tools MUST:
-      - Work for unencrypted rooms as they do today.
-      - Refuse to operate on encrypted rooms with EncryptedRoomError.
+      Unified 20+2 MCP tool surface. All 20 operational tools transparently handle both
+      encrypted and unencrypted rooms. Key E2EE-enhanced and E2EE-specific tools are
+      specified below.
 
     tools:
 
-      list-joined-rooms:
-        name: list-joined-rooms
-        summary: List all rooms the client has joined.
+      create-room:
+        name: create-room
+        summary: Create a new Matrix room (encrypted by default with automatic pre-flight capability fallback).
         request:
           type: object
-          properties: {}
-        response:
-          type: object
+          required: ["roomName"]
           properties:
-            rooms:
-              type: array
-              items:
-                type: object
-                properties:
-                  roomId: { $ref: "#/concepts/RoomId" }
-                  name:   { type: string, nullable: true }
-                  memberCount: { type: integer }
-        error_behavior:
-          - When called normally, behave exactly like mjknowles/matrix-mcp-server.
-          - When the Matrix client fails auth or sync, return the same codes/messages as the existing server.
-
-      get-room-info:
-        name: get-room-info
-        summary: Get detailed information about a specific room.
-        request:
-          type: object
-          properties:
-            roomId:
-              $ref: "#/concepts/RoomId"
-        response:
-          type: object
-          properties:
-            roomId:
-              $ref: "#/concepts/RoomId"
-            name:
+            roomName:
               type: string
-              nullable: true
+            isPrivate:
+              type: boolean
+              default: false
             topic:
               type: string
               nullable: true
-            isDirect:
-              type: boolean
-            memberCount:
-              type: integer
-            createdAt:
+            inviteUsers:
+              type: array
+              items: { $ref: "#/concepts/UserId" }
+            roomAlias:
               type: string
-              format: date-time
-            encryptionEnabled:
-              type: boolean
-              description: True if the room has m.room.encryption enabled.
+              nullable: true
+            encryptionMode:
+              $ref: "#/concepts/EncryptionMode"
+        response:
+          type: object
+          description: Formatted text summary including room ID, privacy, invited users, and encryption state (plus fallback reason if downgraded in "auto" mode).
+          properties:
+            roomId: { $ref: "#/concepts/RoomId" }
+            encrypted: { type: boolean }
+            fallbackReason: { type: string, nullable: true }
         error_behavior:
-          - If the room does not exist or is unknown, return the same error code/message as the v1 server.
-          - If the underlying Matrix API reports an error, propagate the same error code and a compatible message.
+          - In "auto" mode, if /keys/query fails due to network or federation error, fail closed (do not downgrade).
+          - In "e2ee" mode, if any invitee lacks cross-signed E2EE keys, return TrustPolicyNotSatisfiedError.
+          - If encryption is requested and bootstrap is incomplete, return CryptoNotBootstrappedError.
+
+      send-direct-message:
+        name: send-direct-message
+        summary: Send a direct message to a user, creating a new DM room (with encryptionMode="auto" by default) if none exists.
+        request:
+          type: object
+          required: ["targetUserId", "message"]
+          properties:
+            targetUserId: { $ref: "#/concepts/UserId" }
+            message: { type: string }
+            encryptionMode:
+              $ref: "#/concepts/EncryptionMode"
+        response:
+          type: object
+          properties:
+            roomId: { $ref: "#/concepts/RoomId" }
+            eventId: { type: string }
+            encrypted: { type: boolean }
+            created: { type: boolean }
+
+      send-message:
+        name: send-message
+        summary: Send a message to a Matrix room (automatically encrypts via Megolm for cross-signed devices if the room is encrypted, or sends plaintext if unencrypted).
+        request:
+          type: object
+          required: ["roomId", "message"]
+          properties:
+            roomId: { $ref: "#/concepts/RoomId" }
+            message: { type: string }
+            messageType:
+              type: string
+              enum: ["text", "html", "emote"]
+              default: "text"
+            replyToEventId:
+              type: string
+              nullable: true
+        response:
+          type: object
+          properties:
+            eventId: { type: string }
+            encrypted: { type: boolean }
+        error_behavior:
+          - If the room is encrypted and E2EE bootstrap is incomplete, return CryptoNotBootstrappedError.
+          - Outbound room keys are withheld (m.unverified) from any member device that is not cross-signed.
 
       get-room-messages:
         name: get-room-messages
-        summary: Get recent messages from a room (unencrypted only).
+        summary: Retrieve recent messages from a Matrix room (automatically decrypting encrypted events when keys are present and marking undecryptable events).
         request:
           type: object
+          required: ["roomId"]
           properties:
             roomId: { $ref: "#/concepts/RoomId" }
             limit:
@@ -168,44 +209,20 @@ apis:
                 type: object
                 properties:
                   eventId: { type: string }
-                  sender:  { $ref: "#/concepts/UserId" }
-                  body:    { type: string }
+                  sender: { $ref: "#/concepts/UserId" }
+                  body: { type: string }
+                  encrypted: { type: boolean }
+                  decryptionState: { $ref: "#/concepts/DecryptionState" }
                   timestamp: { type: string, format: date-time }
         error_behavior:
-          - If room is encrypted, do not attempt to decrypt.
-          - Return EncryptedRoomError with the existing error code and message "room is encrypted; use *-r2 tools instead".
+          - If an encrypted event is missing its Megolm key, do not panic; include the message with decryptionState="missing_key" and body marker "[Encrypted message - unable to decrypt (missing_key)]".
 
-      send-message:
-        name: send-message
-        summary: Send a message to a room (unencrypted only).
-        request:
-          type: object
-          properties:
-            roomId: { $ref: "#/concepts/RoomId" }
-            body:   { type: string }
-        response:
-          type: object
-          properties:
-            eventId: { type: string }
-        error_behavior:
-          - If room is encrypted, return EncryptedRoomError as above.
-
-  v2:
-    description: >
-      Extended tools that add E2EE support while remaining compatible with v1 semantics.
-      Tools are named with a -r2 suffix and include an optional encryption_mode parameter.
-      v2 key management baseline:
-      - One persistent device per agent instance.
-      - Persistent crypto store for Olm/Megolm state.
-      - Explicit bootstrap and health/status reporting.
-
-    tools:
-
-      bootstrap-e2ee-r2:
-        name: bootstrap-e2ee-r2
+      bootstrap-e2ee:
+        name: bootstrap-e2ee
         summary: >
-          Initialize and verify E2EE state for this MCP device, including
-          device key upload and initial one-time keys.
+          Initialize or verify E2EE state for this MCP device, including device key upload,
+          Secret Storage unlock, and cross-signing verification. Also runs automatically at
+          server startup when E2EE_ENABLED=true.
         request:
           type: object
           properties:
@@ -213,21 +230,19 @@ apis:
               type: boolean
               default: false
               description: >
-                If true, clear and recreate local crypto store and re-upload keys.
+                If true, clear and recreate local crypto store and rotate device keys.
             trustPolicy:
               $ref: "#/concepts/TrustPolicy"
             backupPassphraseEnvVar:
               type: string
               nullable: true
               description: >
-                Name of env var that holds encrypted backup passphrase.
-                Pass variable name only, never raw secret value.
+                Name of env var that holds the recovery secret. Pass variable name only, never raw secret value.
             backupPassphraseRef:
               type: string
               nullable: true
               description: >
-                Optional reference to a secret manager entry for encrypted backup/restore.
-                Never pass raw secrets in tool arguments.
+                Optional reference to a secret manager entry for encrypted backup/restore. Never pass raw secrets.
         response:
           type: object
           properties:
@@ -235,6 +250,8 @@ apis:
               $ref: "#/concepts/DeviceId"
             identityKey:
               type: string
+            crossSigned:
+              type: boolean
             olmEnabled:
               type: boolean
             cryptoStoreState:
@@ -246,110 +263,38 @@ apis:
             resolvedBackupSource:
               type: string
               enum: ["none", "secret_manager_ref", "env_var", "recovery_key_file"]
+            keyBackupRestore:
+              $ref: "#/concepts/KeyBackupRestoreState"
             trustPolicy:
               $ref: "#/concepts/TrustPolicy"
             notes:
               type: string
         error_behavior:
           - If local crypto store cannot be opened, return KeyStoreUnavailableError.
-          - If trustPolicy is anything other than "cross-signed", return a structured trust-policy error.
-          - If this device is not cross-signed, do not upload room keys to unverified devices. Return a structured error telling the operator to restore or create the recovery key.
+          - If trustPolicy is anything other than "cross-signed", return TrustPolicyNotSatisfiedError.
+          - If an identity already exists on the homeserver and no recovery secret resolves, return IdentityExistsError.
 
-      create-room-r2:
-        name: create-room-r2
-        summary: Create a room, optionally encrypted, superseding create-room.
-        request:
-          type: object
-          properties:
-            name:
-              type: string
-            isDirect:
-              type: boolean
-              default: false
-            invitees:
-              type: array
-              items: { $ref: "#/concepts/UserId" }
-            encryption_mode:
-              $ref: "#/concepts/EncryptionMode"
-        response:
-          type: object
-          properties:
-            roomId: { $ref: "#/concepts/RoomId" }
-            encryptionEnabled:
-              type: boolean
-            usingDeviceId:
-              $ref: "#/concepts/DeviceId"
-        error_behavior:
-          - If encryption_mode is "e2ee" and bootstrap is incomplete, return CryptoNotBootstrappedError.
-
-      send-message-r2:
-        name: send-message-r2
-        summary: Send a message, supporting both unencrypted and E2EE rooms.
-        request:
-          type: object
-          properties:
-            roomId: { $ref: "#/concepts/RoomId" }
-            body:   { type: string }
-            encryption_mode:
-              $ref: "#/concepts/EncryptionMode"
-        response:
-          type: object
-          properties:
-            eventId: { type: string }
-            encrypted:
-              type: boolean
-            usingDeviceId:
-              $ref: "#/concepts/DeviceId"
-        error_behavior:
-          - If encryption_mode is "e2ee" and bootstrap is incomplete, return CryptoNotBootstrappedError.
-          - If encryption_mode is "e2ee" and crypto store is unavailable, return KeyStoreUnavailableError.
-
-      get-room-messages-r2:
-        name: get-room-messages-r2
-        summary: Get recent messages, decrypting if needed.
-        request:
-          type: object
-          properties:
-            roomId: { $ref: "#/concepts/RoomId" }
-            limit:
-              type: integer
-              default: 20
-        response:
-          type: object
-          properties:
-            messages:
-              type: array
-              items:
-                type: object
-                properties:
-                  eventId:   { type: string }
-                  sender:    { $ref: "#/concepts/UserId" }
-                  body:      { type: string }
-                  encrypted: { type: boolean }
-                  decryptionState:
-                    type: string
-                    enum: ["not_encrypted", "decrypted", "missing_key", "failed"]
-                  timestamp: { type: string, format: date-time }
-        error_behavior:
-          - If room is encrypted and keys are unavailable, return MissingRoomKeyError or mark per-message decryptionState.
-          - If crypto store is unavailable, return KeyStoreUnavailableError.
-
-      get-encryption-status-r2:
-        name: get-encryption-status-r2
-        summary: Report room/device encryption readiness and key-management health.
+      get-encryption-status:
+        name: get-encryption-status
+        summary: Report room and device E2EE readiness, cross-signing state, and crypto store health.
         request:
           type: object
           properties:
             roomId:
               $ref: "#/concepts/RoomId"
+              nullable: true
         response:
           type: object
           properties:
             roomId:
               $ref: "#/concepts/RoomId"
+              nullable: true
             roomEncrypted:
               type: boolean
+              nullable: true
             bootstrapped:
+              type: boolean
+            crossSigned:
               type: boolean
             deviceId:
               $ref: "#/concepts/DeviceId"
@@ -362,30 +307,22 @@ apis:
             backupSourceConfigured:
               type: string
               enum: ["none", "secret_manager_ref", "env_var", "recovery_key_file"]
+            keyBackupRestore:
+              $ref: "#/concepts/KeyBackupRestoreState"
             notes:
               type: string
 
 tests:
-  v1_compat:
+  unencrypted_and_fallback:
     description: >
-      All existing Matrix MCP endpoints must behave identically to the mjknowles/matrix-mcp-server.
-      Use matrix-mcp-test-plan.md as the reference for expected behavior and edge cases.
-    sources:
-      - file: matrix-mcp-test-plan.md
+      - Unencrypted rooms (e.g., Fleet HQ Clean) continue to work with send-message and get-room-messages.
+      - create-room with encryptionMode="auto" falls back to an unencrypted room when /keys/query shows an invitee has no cross-signed E2EE keys, and fails closed on network errors.
 
-  v2_e2ee:
+  cross_signed_e2ee:
     description: >
-      New -r2 tools must pass additional E2EE scenarios:
-      - Agent-internal encrypted room creation and messaging.
-      - Refusal of v1 tools on encrypted rooms with EncryptedRoomError.
-      - After MCP restart, previously encrypted room messages remain decryptable.
-      - After host migration with restored crypto store, decryption still works.
-      - If crypto store is lost, v2 returns structured key-management errors.
-      - bootstrap-e2ee-r2 resolves backup secret source with documented precedence.
-      - trustPolicy is cross-signed. Omitting it means cross-signed. Passing tofu is an error.
-      - A device that is not cross-signed does not receive room keys.
-      - Acceptance homeserver is Continuwuity. First gate is an encrypted group room.
-
-# You can now:
-# Use get-room-info as a template for the other v1 tools in your test plan (users, notifications, etc.).
-# Extend the v2 section similarly as you design more E2EE‑aware operations.
+      - Startup auto-bootstrap unlocks Secret Storage (or creates cross-signing on a fresh account and writes a 0600 recovery-key file).
+      - create-room with encryptionMode="auto" creates an encrypted room when invitees are cross-signed (or when no invitees are specified).
+      - send-message and get-room-messages transparently encrypt and decrypt in encrypted rooms.
+      - After MCP restart or host migration with restored crypto store, previously encrypted room messages remain decryptable.
+      - A device that is not cross-signed does not receive room keys (m.unverified).
+      - Acceptance homeserver is Continuwuity; first gate is an encrypted group room round-trip with Element.

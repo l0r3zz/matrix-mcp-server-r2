@@ -5,25 +5,31 @@ alwaysApply: true
 
 # Matrix MCP Server R2 -- Project Context
 
-Rust rewrite of the TypeScript Matrix MCP server. Exposes ~20 Matrix operations as MCP tools via Streamable HTTP transport. Part of the Agent Matrix ecosystem.
+Unified Rust Matrix gateway for the Agent-Matrix fleet. Exposes 20 operational Matrix MCP tools via Streamable HTTP transport (`/mcp`) that transparently support Cross-Signed E2EE by default (with automatic pre-flight `/keys/query` fallback to unencrypted rooms when an invitee lacks E2EE keys), plus 2 E2EE management tools (`bootstrap-e2ee` and `get-encryption-status`), and serves as the single Matrix client and SQLite crypto store owner per agent container (with Stage 2 `003-integrated-matrix-bot` absorbing `matrix-bot` into `src/bot/`).
 
 ## Architecture
 
-- **Three-file core**: `main.rs` (Axum app, transport), `matrix/client.rs` (Matrix ops), `mcp/server.rs` (tool definitions)
-- **Streamable HTTP MCP**: rmcp's StreamableHttpService + LocalSessionManager at `/mcp`
-- **Shared Matrix client**: Single client with background sync (NOT per-tool ephemeral)
+- **Core modules**: `main.rs` (Axum app, `/mcp` transport, `/health`), `matrix/client.rs` (Matrix client, SQLite crypto store, startup auto-bootstrap, background sync), `mcp/server.rs` (20+2 unified MCP tools), and planned `bot/` (Stage 2 reactive `/sync` -> Agent Zero `/api/api_message` dispatcher)
+- **Streamable HTTP MCP**: rmcp's `StreamableHttpService` + `LocalSessionManager` at `/mcp`
+- **Shared Matrix client**: Single `matrix-sdk` client with background sync and single SQLite crypto store per agent container
 - **TTL client cache**: 15-min TTL in `matrix/cache.rs`, primed for multi-identity
 
-## Key Versions (pin in all code)
+## Key Versions
 
-- `matrix-sdk` = 0.10 (rustls, optional e2e-encryption)
-- `ruma` = 0.12 (client-api-c, compat)
-- `rmcp` = 1.2 (server, streamable HTTP, macros)
-- `tokio` = 1.x, `axum` = 0.8, `thiserror` = 2.0
-- Rust edition 2021, MSRV 1.88
+- **Target (002-e2ee-cross-signing, starting at T001)**:
+  - `matrix-sdk` = 0.19 (`rustls-tls`, optional `e2e-encryption` + `bundled-sqlite`)
+  - `ruma` = follows `matrix-sdk` 0.19
+  - Rust edition 2021, MSRV >= 1.96
+- **Current compiling pin (until T001)**:
+  - `matrix-sdk` = 0.10, `ruma` = 0.12, Rust 1.88
+- **Locked across both**:
+  - `rmcp` = 1.2 (server, streamable HTTP, macros)
+  - `tokio` = 1.x, `axum` = 0.8, `thiserror` = 2.0
 
 ## Related Resources
 
+- `.specify/memory/constitution.md` -- Project constitution (v2.0.0)
+- `.specify/specs/002-e2ee-cross-signing/` -- Active Unified Cross-Signed E2EE MCP specification & tasks
+- `.specify/specs/003-integrated-matrix-bot/` -- Stage 2 integrated reactive bot specification
+- `spec/matrix-mcp-v1-v2.yml` -- Unified 20+2 API contract
 - `reference/ts-source/` -- Frozen TypeScript implementation snapshot (do not modify)
-- `spec/matrix-mcp-v1-v2.yml` -- v1/v2 API spec
-- `.a0proj/instructions/project-instructions.md` -- Agent Zero project constraints

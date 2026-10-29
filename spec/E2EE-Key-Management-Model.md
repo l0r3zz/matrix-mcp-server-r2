@@ -9,11 +9,14 @@ Its goal is to explain, in plain language, how keys should be managed for v2 E2E
 
 ---
 
-## 0. Locked Decisions (2026-10-23)
+## 0. Locked Decisions (Updated 2026-10-29)
 
-These decisions replace the earlier TOFU default. The October spec is `.specify/specs/002-e2ee-cross-signing/spec.md`.
+These decisions replace the earlier TOFU default and the Two-Tier (`-r2` tool split) draft. The active specification is `.specify/specs/002-e2ee-cross-signing/spec.md` (followed by Stage 2 `.specify/specs/003-integrated-matrix-bot/spec.md`).
 
-- **Trust policy:** `cross-signed` only. There is no `tofu` mode and no `strict` opt-in.
+- **Unified Tool Surface (No `-r2` Split):** The 20 existing MCP tools (`create-room`, `send-direct-message`, `send-message`, `get-room-messages`, `get-messages-by-date`, `identify-active-users`, etc.) transparently support both E2EE and unencrypted rooms. Two management tools are added: `bootstrap-e2ee` and `get-encryption-status`.
+- **Auto-Bootstrap at Startup:** When `E2EE_ENABLED=true`, device key initialization and cross-signing bootstrap run automatically at server startup so external clients do not need to call `bootstrap-e2ee` manually before using encrypted rooms.
+- **E2EE-by-Default Room Creation with Pre-Flight Fallback:** `create-room` and `send-direct-message` default to `encryptionMode: "auto"` when E2EE is enabled, querying `/_matrix/client/v3/keys/query` for invitees to create an encrypted (`m.room.encryption`) room when all invitees have cross-signed E2EE keys, or automatically falling back to an unencrypted room when an invitee lacks E2EE keys (network/federation errors fail closed).
+- **Trust policy:** `cross-signed` only inside encrypted rooms. There is no `tofu` mode and no `strict` opt-in.
 - **Room keys:** do not send room keys or other encrypted to-device secrets to a device that is not cross-signed. Withhold with `m.room_key.withheld` / `m.unverified` via `matrix-sdk` 0.19 recipient settings.
 - **Recovery secret input:** secret manager reference, environment variable name, or file path. Never a raw secret in an MCP argument, log line, or tool result.
 - **Recovery secret precedence:**
@@ -21,7 +24,7 @@ These decisions replace the earlier TOFU default. The October spec is `.specify/
   2. `backupPassphraseEnvVar` (name only)
   3. `MATRIX_RECOVERY_KEY_FILE` (path on the store volume)
 - **SDK:** `matrix-sdk` 0.19.x, Rust >= 1.96. `matrix-sdk-crypto` >= 0.16.1 (CVE-2026-45056).
-- **Device id:** one id per agent, stored in the crypto-store directory. The literal `MCP_SERVER` is not allowed.
+- **Device id:** one id per agent, stored in `$CRYPTO_STORE_PATH/.device-id` and aligned with `/_matrix/client/v3/account/whoami`. The literal `MCP_SERVER` is not allowed.
 
 Raw secret values must never be passed in MCP tool arguments.
 

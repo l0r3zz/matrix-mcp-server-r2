@@ -29,7 +29,7 @@ The compiling tree is still `matrix-sdk` 0.10 and Rust 1.88. That pin stays unti
 | Item | October design | Code on 2026-10-23 |
 |------|----------------|--------------------|
 | Spec | `.specify/specs/002-e2ee-cross-signing/` (`spec.md`, `plan.md`, `data-model.md`, `tasks.md`) | May spec kept, marked superseded |
-| Trust | Cross-signed only. Recorded in the October spec, `spec/E2EE-Key-Management-Model.md`, `spec/matrix-mcp-v1-v2.yml`, and the constitution | No crypto store, no cross-signing, no `-r2` tools |
+| Trust | Cross-signed only. Recorded in the October spec, `spec/E2EE-Key-Management-Model.md`, `spec/matrix-mcp-v1-v2.yml`, and the constitution | No crypto store, no cross-signing, no E2EE management tools (`bootstrap-e2ee`, `get-encryption-status`) |
 | SDK | 0.19.x, Rust >= 1.96 | `Cargo.toml` still pins 0.10 / Rust 1.88 so `cargo build` works |
 | Device id | File beside the store | `src/matrix/client.rs` still restores `device_id: "MCP_SERVER"` for every process. Removal is task T002 |
 | Feature flag | `e2ee` gates the crypto build. A build without it still serves the 20 v1 tools | The flag only enables `matrix-sdk/e2e-encryption`. Nothing calls it |
@@ -127,8 +127,8 @@ Two version documents matter before writing against 0.19:
 ## What stays from the May artifacts
 
 - Do not implement Olm or Megolm. Call `matrix-sdk`.
-- A build without the crypto stack still serves the 20 v1 tools.
-- v1 tools on an encrypted room return `room is encrypted; use *-r2 tools instead`.
+- A build without the crypto stack still serves the 20 operational tools on unencrypted rooms.
+- With the `e2ee` feature enabled, the 20 operational tools transparently handle both encrypted and unencrypted rooms (`create-room` and `send-direct-message` default to `encryptionMode: "auto"` with `/keys/query` pre-flight fallback to unencrypted rooms when an invitee lacks E2EE keys), and 2 management tools (`bootstrap-e2ee` and `get-encryption-status`) are added.
 - The crypto store is a volume. Losing it means sessions that were not in key backup cannot be decrypted.
 - Never log keys, passphrases, or decrypted bodies.
 - The four-step exchange (keys/upload, keys/query, keys/claim, then `m.room_key` over Olm) is still how a Megolm session starts. The SDK performs it during sync and send.
@@ -139,7 +139,7 @@ Design for this decision is written. Code is not.
 
 1. T001 bumps `matrix-sdk` to 0.19 and `rust-version` to 1.96 together with the client call sites. `rmcp` stays at 1.2.
 2. T002 removes the `MCP_SERVER` device id. The id comes from the store file, not a constant.
-3. Store, cross-signing bootstrap, and recipient strategy come before new `-r2` tool schemas.
+3. Store, cross-signing auto-bootstrap, and recipient strategy come before the unified tool E2EE upgrades and new `bootstrap-e2ee` / `get-encryption-status` tools.
 4. The Continuwuity group-room gate is last: encrypt, round-trip with Element, restart, history still decrypts. Record the DM result separately. A DM failure does not relax the trust policy.
 
 ## Sources

@@ -8,194 +8,58 @@ alwaysApply: false
 
 ## Project Context
 
-This is `matrix-mcp-server-r2`, a Rust MCP (Model Context Protocol) server providing Matrix homeserver tools to AI agents. The v2 milestone adds E2EE (end-to-end encryption) support so agents can operate in encrypted Matrix rooms.
+This is `matrix-mcp-server-r2`, the unified Rust Matrix MCP gateway for the Agent-Matrix fleet. It provides 20 operational Matrix tools that transparently support Cross-Signed E2EE by default (with automatic pre-flight `/keys/query` fallback to unencrypted rooms when an invitee lacks cross-signed E2EE keys) plus 2 E2EE management tools (`bootstrap-e2ee` and `get-encryption-status`), and serves as the single Matrix client and SQLite crypto store owner per agent container (with Stage 2 absorbing `matrix-bot` into `src/bot/`).
 
 ### Crate Versions (pin these in all code and suggestions)
 
-- E2EE target: `matrix-sdk` 0.19.x, Rust >= 1.96, `e2e-encryption` + `bundled-sqlite`
+- E2EE target: `matrix-sdk` 0.19.x, Rust >= 1.96, `e2e-encryption` + `bundled-sqlite` + `rustls-tls`
 - Crypto floor: `matrix-sdk-crypto` >= 0.16.1 (CVE-2026-45056). The 0.19 line meets this
 - `rmcp` stays 1.2 for this feature. Do not mix in the 3.x migration
 - `ruma` follows `matrix-sdk` 0.19. Do not keep an independent 0.12 pin after the bump
 - `tokio` 1.x, `axum` 0.8, `thiserror` 2.0, edition 2021
-- The tree still compiles against `matrix-sdk` 0.10 until tasks.md T001 flips the pin. New E2EE code must target 0.19, not 0.10 APIs such as `Client::builder().sqlite_store(...)`
+- The tree still compiles against `matrix-sdk` 0.10 until `tasks.md` T001 flips the pin. New E2EE code must target 0.19, not 0.10 APIs
 
 ### Feature Flag
 
 E2EE is gated behind a Cargo feature flag:
 ```toml
 [features]
-e2ee = ["matrix-sdk/e2e-encryption"]
+e2ee = ["matrix-sdk/e2e-encryption", "matrix-sdk/bundled-sqlite"]
 ```
 All E2EE code paths must be conditionally compiled with `#[cfg(feature = "e2ee")]` so the server can still build and run without encryption support.
 
 ## Encryption Architecture
 
-### How matrix-sdk E2EE Works
+### How matrix-sdk 0.19 E2EE Works
 
-When the `e2e-encryption` feature is enabled, `matrix-sdk` handles encryption **transparently**:
+When the `e2e-encryption` feature is enabled, `matrix-sdk` 0.19 handles encryption **transparently**:
 
-- `room.send(content)` automatically encrypts if the room has `m.room.encryption` state
+- `room.send(content)` automatically encrypts via Megolm if the room has `m.room.encryption` state, and sends plaintext `m.room.message` if the room is unencrypted
 - Incoming encrypted events are automatically decrypted during sync
-- The `OlmMachine` state machine (from `matrix-sdk-crypto`) manages all Olm/Megolm sessions
-- `vodozemac` (pure Rust, replaces deprecated `libolm`) provides the underlying Olm/Megolm crypto primitives
+- The `OlmMachine` state machine (from `matrix-sdk-crypto`, owned by `Client`) manages all Olm/Megolm sessions
+- `vodozemac` (pure Rust) provides the underlying Olm/Megolm crypto primitives
 
 ### What We Must Implement
 
-1. **Persistent crypto store** -- `SqliteCryptoStore` for device keys and Megolm sessions that survives container restarts
-2. **Device key bootstrap** -- publish identity keys and one-time prekeys on first run
-3. **Cross-signing bootstrap** -- automated (no human interaction) during agent startup
-4. **Encrypted room creation** -- set `m.room.encryption` state event
-5. **Decryption failure handling** -- surface "Unable to decrypt" errors gracefully in MCP tool responses
-6. **Encryption status exposure** -- tools to query room/device encryption state
+1. **Persistent crypto store & `.device-id`** -- Bundled SQLite store at `CRYPTO_STORE_PATH` (`0700`) and `$CRYPTO_STORE_PATH/.device-id` aligned with `/_matrix/client/v3/account/whoami`, with exclusive process lock
+2. **Startup auto-bootstrap & `bootstrap-e2ee` tool** -- Automatically unlock Secret Storage / cross-signing on startup when `E2EE_ENABLED=true` (or create cross-signing once on a fresh account and write `$CRYPTO_STORE_PATH/recovery-key` mode `0600`)
+3. **Strict cross-signed recipient strategy** -- Configure `matrix-sdk` 0.19 so Megolm room keys are shared **only** with cross-signed devices (withholding keys from unverified devices via `m.unverified`; never `TOFU`)
+4. **E2EE-by-default room creation with pre-flight capability fallback** -- `create-room` and `send-direct-message` default to `encryptionMode: "auto"`, querying `/_matrix/client/v3/keys/query` for invitees to enable `m.room.encryption` when all invitees have cross-signed keys or automatically fall back to an unencrypted room when an invitee lacks E2EE keys (failing closed on network errors)
+5. **Transparent messaging & UTD handling** -- `send-message`, `get-room-messages`, `get-messages-by-date`, and `identify-active-users` work seamlessly on both encrypted and unencrypted rooms, surfacing `UnableToDecrypt` events as `[Encrypted message - unable to decrypt (missing_key)]`
+6. **Encryption status & `/health` exposure** -- `get-encryption-status` MCP tool and `e2ee` / `crossSigned` fields on `GET /health`
 
-## Rust Coding Patterns
+## Unified Tool Surface (No `-r2` Duplicate Tools)
 
-### Ownership and Borrowing
-
-- Prefer borrowing (`&self`, `&str`, `&[T]`) over cloning
-- When `.clone()` is needed for async moves (e.g., spawning tasks), comment why
-- Use `Arc<T>` for shared state across async tasks; avoid `Arc<Mutex<T>>` when message passing via channels is viable
-- The `MatrixMcpServer` struct already uses `Arc<Config>` -- follow this pattern for any shared crypto state
-
-### Async Patterns
-
-- All async code runs on Tokio 1.x multi-threaded runtime
-- Use `tokio::sync::Mutex` (not `std::sync::Mutex`) when a lock must be held across `.await` points
-- Do not construct a standalone `OlmMachine` beside `Client`. On 0.19 the client owns the crypto store, sync, and room-key sharing
-- Set decryption settings and the room-key recipient strategy so keys go only to cross-signed devices. Never pass `TrustRequirement::Untrusted`
-
-### Error Handling
-
-- Use `thiserror` for error type definitions in `src/error.rs`
-- Add E2EE-specific error variants to `AppError`:
-  ```rust
-  #[error("E2EE not enabled (build with --features e2ee)")]
-  E2eeNotEnabled,
-  #[error("Crypto store error: {0}")]
-  CryptoStore(String),
-  #[error("Decryption failed: {0}")]
-  DecryptionFailed(String),
-  #[error("Device key bootstrap failed: {0}")]
-  KeyBootstrapFailed(String),
-  ```
-- In MCP tool handlers, return `CallToolResult::error(...)` for decryption failures rather than panicking
-- Distinguish between "room is encrypted but we can't decrypt" vs "room is not encrypted" in responses
-
-### Conditional Compilation
-
-Gate all E2EE code behind the feature flag:
-```rust
-#[cfg(feature = "e2ee")]
-mod e2ee {
-    // E2EE-specific modules
-}
-
-#[cfg(feature = "e2ee")]
-pub async fn bootstrap_e2ee(&self) -> Result<CallToolResult, McpError> {
-    // ...
-}
-
-#[cfg(not(feature = "e2ee"))]
-pub async fn bootstrap_e2ee(&self) -> Result<CallToolResult, McpError> {
-    Ok(err_text("E2EE support not enabled. Rebuild with --features e2ee"))
-}
-```
-
-## Matrix SDK E2EE Patterns
-
-### Client Builder with Crypto Store
-
-On `matrix-sdk` 0.19, enable `e2e-encryption` and `bundled-sqlite`. Open one store directory per agent. Read or create `.device-id` in that directory before restoring the session. Do not pass the literal `MCP_SERVER`.
-
-Confirm the builder method names against the 0.19 docs at implementation time (`StoreConfig`, `with_decryption_settings`, `with_room_key_recipient_strategy`). The 0.10 `.sqlite_store(path, None)` call is not the pattern to copy.
-
-Recipient strategy must exclude devices that are not cross-signed.
-
-### Creating Encrypted Rooms
-
-Set the `m.room.encryption` state event during room creation:
-```rust
-use ruma::events::room::encryption::RoomEncryptionEventContent;
-use ruma::events::room::history_visibility::{HistoryVisibility, RoomHistoryVisibilityEventContent};
-
-let mut req = CreateRoomRequest::new();
-req.initial_state = vec![
-    InitialStateEvent::new(RoomEncryptionEventContent::with_recommended_defaults())
-        .to_raw_any(),
-    InitialStateEvent::new(RoomHistoryVisibilityEventContent::new(HistoryVisibility::Joined))
-        .to_raw_any(),
-];
-```
-
-### Handling Decryption Failures
-
-When parsing timeline events, check for encrypted events that couldn't be decrypted:
-```rust
-if ev.get("type").and_then(|t| t.as_str()) == Some("m.room.encrypted") {
-    // Event could not be decrypted -- include a clear indicator in the response
-    let algorithm = ev.pointer("/content/algorithm")
-        .and_then(|a| a.as_str())
-        .unwrap_or("unknown");
-    out.push(format!("[Encrypted message - unable to decrypt ({})]", algorithm));
-}
-```
-
-### Encryption Status Check
-
-```rust
-let is_encrypted = room.is_encrypted().await.unwrap_or(false);
-```
-This is already used in `get_room_info` -- extend it to all message-reading tools so responses clearly indicate encryption state.
-
-## v2 E2EE Tools (Planned)
-
-These tools should follow the existing `#[tool(...)]` macro pattern in `src/mcp/server.rs`:
-
-- **`bootstrap_e2ee`** -- publish device identity, upload one-time keys, optionally bootstrap cross-signing. Returns device ID and fingerprint.
-- **`create_encrypted_private_room`** -- create a room with `m.room.encryption` state, invite specified users, set history visibility to `joined`.
-- **`get_encryption_status`** -- for a room: encryption algorithm, rotation period, whether all members' devices are verified. For the server itself: device ID, key fingerprints, cross-signing status.
-- E2EE-aware **`send_message`** / **`get_room_messages`** -- these already exist; with the feature flag enabled they transparently encrypt/decrypt. Add clear error handling for decryption failures.
-
-## Testing
-
-- Use `#[cfg(feature = "e2ee")]` on E2EE-specific tests
-- Run E2EE tests with: `cargo test --features e2ee`
-- For integration tests, use the existing `wiremock` setup to mock homeserver responses
-- Test both feature-enabled and feature-disabled builds to ensure graceful degradation
+Do not create duplicate `-r2` room/message tools or throw `EncryptedRoomError` on existing tools.
+- **Upgraded in place**: `create-room`, `send-direct-message`, `send-message`, `get-room-messages`, `get-messages-by-date`, `identify-active-users`
+- **New E2EE management tools**:
+  - `bootstrap-e2ee` -- Verify or re-run device key upload, Secret Storage unlock, and cross-signing
+  - `get-encryption-status` -- Report device ID, cross-signing state, crypto store health, and optional room encryption status
 
 ## Security Considerations
 
-- Never log encryption keys, session tokens, or decrypted content at INFO level; use DEBUG or TRACE only behind `RUST_LOG`
-- The SQLite crypto store file path should be configurable via environment variable (e.g., `CRYPTO_STORE_PATH`)
-- The Feb 2026 vodozemac Olm 3DH disclosure is noted but not practically exploitable under Matrix's authenticated key distribution model
-- Trust policy is cross-signed only. Do not implement TOFU or `ignore_unverified_devices`
-- Canonical spec: `.specify/specs/002-e2ee-cross-signing/spec.md`
-- Recovery keys must not be stored in plaintext in the container image; use mounted secrets or environment variables
-
-## E2EE Handshake Flow (Key Exchange Sequence)
-
-Understanding the handshake is critical for debugging. The 4-step key exchange:
-
-1. **keys/upload** (`/_matrix/client/v3/keys/upload`) -- publish device identity keys (Ed25519 + Curve25519) and one-time prekeys
-2. **keys/query** (`/_matrix/client/v3/keys/query`) -- fetch recipient device keys from the homeserver
-3. **keys/claim** (`/_matrix/client/v3/keys/claim`) -- claim a one-time key to bootstrap the Olm session (3DH)
-4. **m.room_key to-device** -- Megolm session key delivered encrypted per-device via Olm
-
-With `matrix-sdk` this is handled automatically during sync and `room.send()`. The relevant internal code paths in `matrix-rust-sdk` are:
-
-- `crates/matrix-sdk-crypto/src/machine.rs` -- `OlmMachine` state machine
-- `crates/matrix-sdk-crypto/src/olm/account.rs` -- one-time key management, Olm session creation
-- `crates/matrix-sdk-crypto/src/session_manager/group_sessions/` -- Megolm outbound session creation and key sharing
-- `crates/matrix-sdk-crypto/src/store/` -- key storage, session persistence (CryptoStore trait)
-- `crates/matrix-sdk-crypto/src/verification/` -- device verification (SAS, QR)
-
-## References
-
-- Matrix E2EE spec: https://spec.matrix.org/latest/client-server-api/#end-to-end-encryption
-- Olm/Megolm protocol specs: https://gitlab.matrix.org/matrix-org/olm/-/tree/master/docs
-- matrix-sdk encryption module: https://matrix-org.github.io/matrix-rust-sdk/matrix_sdk/encryption/index.html
-- matrix-sdk-crypto tutorial: https://docs.rs/matrix-sdk-crypto/latest/matrix_sdk_crypto/tutorial/index.html
-- vodozemac repository: https://github.com/matrix-org/vodozemac
-- matrixbot-ezlogin (reference for bot E2EE bootstrap): https://github.com/m13253/matrixbot-ezlogin
-- Matrix E2EE implementation guide: https://matrix.org/docs/matrix-concepts/end-to-end-encryption
-- Trail of Bits audit (2022): https://matrix.org/blog/2022/05/16/independent-public-audit-of-vodozemac-a-native-rust-implementation-of-matrix-end-to-end-encryption
+- Never log encryption keys, session tokens, passwords, or decrypted content at INFO level; use DEBUG or TRACE only behind `RUST_LOG`
+- The SQLite crypto store directory path is configured via `CRYPTO_STORE_PATH`
+- Trust policy inside encrypted rooms is strictly `cross-signed` only. Do not implement `TOFU` or `ignore_unverified_devices`
+- Canonical specs: `.specify/specs/002-e2ee-cross-signing/spec.md` and `.specify/specs/003-integrated-matrix-bot/spec.md`
+- Recovery keys must never be returned in MCP tool outputs or stored in container images

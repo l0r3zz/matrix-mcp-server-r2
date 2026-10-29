@@ -78,6 +78,11 @@ Default section order:
 
 When the user requests a durable behavior change, record it here or in the relevant child AGENTS.md
 
+- Whenever the user asks for summarized or analyzed data, audits, or analytical results, always write the report to a Markdown file in `spec/` (for example, `spec/<Topic>-YYYYMMDD.md`) in addition to responding in chat.
+
 ## Child DOX Index
 
-This project is not yet indexed. Before continuing you must scan the project, build the DOX tree and replace this message with the actual index. Go deep and scan files recursively to properly evaluate complexity and create nested DOX files where needed.
+- `src/AGENTS.md` -- Rust MCP gateway implementation (`src/`), unified 20+2 E2EE-by-default tools, planned `src/bot/` reactive dispatcher, build/test commands, runtime configuration, and coding boundaries.
+- `spec/` -- Unified API contract (`spec/matrix-mcp-v1-v2.yml`), E2EE architecture/key-management docs, and saved analysis/audit reports.
+- `.specify/` -- Spec Kit governance (`.specify/memory/constitution.md` v2.0.0), active feature pointer (`.specify/feature.json`), feature specifications (`.specify/specs/002-e2ee-cross-signing/`, `.specify/specs/003-integrated-matrix-bot/`), templates, and helper scripts.
+- `reference/` -- Frozen TypeScript implementation snapshot (`reference/ts-source/`) and historical design docs (`reference/docs/`). Do not modify.

@@ -1,14 +1,14 @@
 # AGENTS.md -- Matrix MCP Server R2 (Rust)
 
-Rust rewrite of the TypeScript Matrix MCP server. Exposes ~20 Matrix operations as MCP tools via Streamable HTTP transport. Drop-in replacement for the TS version with planned E2EE support.
+Unified Rust Matrix gateway for the Agent-Matrix fleet. Exposes 20 operational Matrix MCP tools via Streamable HTTP transport (`/mcp`) that transparently support Cross-Signed E2EE by default (with automatic pre-flight `/keys/query` fallback to unencrypted rooms when an invitee lacks E2EE keys), plus 2 E2EE management tools (`bootstrap-e2ee` and `get-encryption-status`), and serves as the single Matrix client and SQLite crypto store owner per agent container (with Stage 2 `003-integrated-matrix-bot` absorbing `matrix-bot` into `src/bot/`).
 
 ## Stack
 
-- **Language**: Rust (edition 2021, rust-version 1.88)
+- **Language**: Rust (edition 2021; compiling pin 1.88 until T001 bumps to >= 1.96)
 - **Async**: Tokio
 - **HTTP**: Axum 0.8, Tower, tower-http (CORS, tracing)
 - **MCP**: rmcp 1.2 (StreamableHttpService + LocalSessionManager at `/mcp`)
-- **Matrix**: matrix-sdk 0.10 (rustls), ruma 0.12
+- **Matrix**: matrix-sdk (compiling pin 0.10 until T001 bumps to 0.19 with `rustls-tls`, `e2e-encryption`, `bundled-sqlite`), ruma
 - **Schemas**: schemars, serde, serde_json
 - **Errors**: thiserror, anyhow
 
