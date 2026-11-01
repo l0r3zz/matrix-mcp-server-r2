@@ -88,4 +88,4 @@ None. T001-T015 each map to at least one requirement, story, edge case, or succe
 - No CRITICAL, HIGH, or MEDIUM issues; `/speckit-implement` may proceed from T001.
 - Optional pre-implementation edits (two lines in `tasks.md`, one in `spec/matrix-mcp-v1-v2.yml`): I2, U2, I3.
 - Optional at the next constitution amendment: I1.
-- Remediation edits are not applied by this report; they await owner approval.
+- Remediation applied 2026-10-31 after owner approval: I1 -> constitution v2.0.2 (Principle VIII always includes both booleans); I2 -> Dependencies line now says T015 blocks recording T014 complete; U2 -> T015 runs `cargo fmt` once and `cargo clippy` plus `cargo test` on each feature-build matrix entry; I3 -> `spec/matrix-mcp-v1-v2.yml` names `MATRIX_UIAA_PASSWORD_FILE` and `UiaaRequiredError`. The same pass added US2 AC5 and a `contracts/README.md` pointer, recorded in `spec/Reconciliation-002-October-vs-May-20261030.md` section 8.

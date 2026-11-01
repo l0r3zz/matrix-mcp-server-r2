@@ -27,6 +27,7 @@ spec:
     - Logs and MCP tool responses MUST NOT contain plaintext key material, passwords, or recovery secrets.
     - Inside encrypted rooms, trust policy is strictly cross-signed (Matrix spec v1.18 / MSC4153). TOFU is rejected.
     - Backup secret resolution supports secret-manager references, env-var names, and MATRIX_RECOVERY_KEY_FILE in strict precedence order.
+    - Initial Secret Storage creation may read an account password from MATRIX_UIAA_PASSWORD_FILE (0600 file) for UIAA on /keys/device_signing/upload only. It is never a tool input. If the homeserver requires UIAA and that file is unset or unreadable, bootstrap returns UiaaRequiredError and does not create an identity.
 
 concepts:
   RoomId:
@@ -92,6 +93,11 @@ concepts:
     description: >
       Returned during bootstrap when the account already has a cross-signing identity
       on the homeserver and no recovery secret was available to unlock it.
+
+  UiaaRequiredError:
+    description: >
+      Returned during bootstrap when the homeserver requires User-Interactive Auth to
+      create a cross-signing identity and MATRIX_UIAA_PASSWORD_FILE is unset or unreadable.
 
   CryptoNotBootstrappedError:
     description: >
@@ -273,6 +279,7 @@ apis:
           - If local crypto store cannot be opened, return KeyStoreUnavailableError.
           - If trustPolicy is anything other than "cross-signed", return TrustPolicyNotSatisfiedError.
           - If an identity already exists on the homeserver and no recovery secret resolves, return IdentityExistsError.
+          - If creating an identity requires UIAA and MATRIX_UIAA_PASSWORD_FILE is unset or unreadable, return UiaaRequiredError.
 
       get-encryption-status:
         name: get-encryption-status

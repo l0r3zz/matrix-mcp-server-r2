@@ -25,6 +25,7 @@ Upgrade `matrix-mcp-server-r2` to `matrix-sdk` 0.19 with a bundled SQLite crypto
 - **Principle IV (Matrix SDK as Crypto Authority)**: Crypto stays inside `matrix-sdk` 0.19 (`vodozemac` + bundled SQLite).
 - **Principle V (Security First)**: Secrets stay off the tool channel and logs; Megolm keys go only to cross-signed devices.
 - **Principle VII (Test Everything)**: E2EE tests gated by `#[cfg(feature = "e2ee")]`; CI runs both feature builds (T015).
+- **Principle VIII (Container-Aware Design)**: `GET /health` always includes `e2ee` and `crossSigned` booleans (constitution v2.0.2, FR-009).
 - **Principle IX (Incremental Delivery)**: `002` delivers the unified E2EE MCP server; `003` absorbs `matrix-bot-rust` into `src/bot/`.
 
 ## Project Structure

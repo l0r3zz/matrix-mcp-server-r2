@@ -28,7 +28,7 @@ Unified Rust Matrix gateway for the Agent-Matrix fleet. Exposes 20 operational M
 
 ## Related Resources
 
-- `.specify/memory/constitution.md` -- Project constitution (v2.0.0)
+- `.specify/memory/constitution.md` -- Project constitution (v2.0.2)
 - `.specify/specs/002-e2ee-cross-signing/` -- Active Unified Cross-Signed E2EE MCP specification & tasks
 - `.specify/specs/003-integrated-matrix-bot/` -- Stage 2 integrated reactive bot specification
 - `spec/matrix-mcp-v1-v2.yml` -- Unified 20+2 API contract

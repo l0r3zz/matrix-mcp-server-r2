@@ -105,8 +105,10 @@ choices MUST account for a persistent crypto store via volume mounts
 (`/a0/usr/workdir/matrix-mcp-server/crypto-store`), stateless restarts with
 session restoration, `.device-id` alignment with the access token's
 `/_matrix/client/v3/account/whoami` device, and environment-variable-driven
-configuration. The `/health` endpoint MUST reflect `e2ee` and `crossSigned`
-status when E2EE is enabled.
+configuration. The `/health` endpoint MUST always include `e2ee` and
+`crossSigned` booleans, including when E2EE is not compiled in, when
+`E2EE_ENABLED=false`, and when `SKIP_MATRIX_INIT=true` (both `false` in
+those cases).
 
 ### IX. Incremental Delivery
 
@@ -224,4 +226,4 @@ Compliance review: a change that touches tool contracts, crypto, or the
 implementation. A locked stack version MUST NOT change inside a feature
 spec. That change requires an amendment here first.
 
-**Version**: 2.0.1 | **Ratified**: 2026-05-11 | **Last Amended**: 2026-10-31
+**Version**: 2.0.2 | **Ratified**: 2026-05-11 | **Last Amended**: 2026-10-31

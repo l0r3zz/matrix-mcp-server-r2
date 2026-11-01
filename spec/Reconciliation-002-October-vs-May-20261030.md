@@ -57,22 +57,24 @@ Status key: covered / partial / missing / conflicting / deferred.
 | Decision | Spec requirement | Plan / data-model / contract | Task | Acceptance / verification | Status |
 |---|---|---|---|---|---|
 | D1 unified surface | Role; FR-006, FR-007 | plan Summary; yml `unified` block | T009, T010, T011 | SC-002, SC-004; T014 | covered |
-| D2 auto pre-flight + fail closed | US3 AC1-4; FR-006 | data-model `EncryptionMode`; yml L134-145, L319 | T009 | SC-004; T013 (fallback vs encrypt); T014 | partial -- fail-closed on network error has no test item |
-| D3 startup auto-bootstrap | US2; FR-004 | plan Summary | T007 | US2 Independent Test (manual) | partial -- no automated test; `SKIP_MATRIX_INIT` interaction unspecified |
-| D4 cross-signed only | US4 AC2; FR-005 | yml L21/L28; data-model `TrustPolicy` | T008 | SC-003; T014 | covered |
-| D5 SDK 0.19 / rust 1.96 / rmcp 1.2 | SDK table; FR-001, FR-010 | plan Technical Context | T001, T002 | SC-005; T012, T013 | covered (Cargo `e2ee` feature currently lacks `bundled-sqlite`; T001 adds it) |
+| D2 auto pre-flight + fail closed | US3 AC1-4; FR-006 | data-model `EncryptionMode`; yml | T009, T013 | SC-004; T013 (network/5xx fails closed, no room); T014(4) | covered |
+| D3 startup auto-bootstrap | US2; FR-004; Edge `SKIP_MATRIX_INIT` | plan Summary; data-model `CryptoStoreState` | T007, T011, T012 | T012 (`SKIP_MATRIX_INIT` health); T013 bootstrap outcomes; T014(6) cold start | covered |
+| D4 cross-signed only | US4 AC2; FR-005 | yml; data-model `TrustPolicy` | T008 | SC-003; T014(3) | covered |
+| D5 SDK 0.19 / Rust 1.99 / rmcp 1.2 | SDK table; FR-001, FR-010 | plan Technical Context | T001, T002, T015 | SC-005; T012, T013, T015 | covered (T001 adds `bundled-sqlite`; section 2 still records the 10-29 floor of 1.96, raised to 1.99 by constitution v2.0.1) |
 | D6 `.device-id` + `/whoami` | US1 AC1-3; FR-003 | data-model On-Disk Layout | T002, T004, T005 | SC-001; T013 | covered |
-| D7 store + lock + single owner | US1; FR-002; Edge Case "two processes" | data-model lock row; `KeyStoreUnavailableError` | T003, T004 | T013 "store lock contention" | covered |
-| D8 secret precedence / redaction | US2 AC1; FR-008 | data-model `RecoverySecret`; Key-Mgmt sec. 0.1 | T006 | none | partial -- no test for precedence, `SecretResolutionError`, or redaction |
-| D9 `IdentityExistsError`, `forceRecreate` | US2 AC3; FR-004 | data-model Errors | T007 | US2 Independent Test (manual) only | partial -- not in T013 or T014 |
-| D10 60 s + async `keyBackupRestore` | NFR-001; US5 | data-model `BootstrapStatus`; yml L266/L310 | T007, T011 | none measurable | partial |
-| D11 `/health` + stubs | US5; FR-001, FR-009 | plan `src/main.rs` row | T011 | T012 | covered |
-| D12 UTD marker | US4 AC3; FR-007 | data-model `MessageDecryption` | T010 | T013 (marker not named); T014 omits UTD | partial |
-| D13 group-room gate 1, DM gate 2 | Edge Cases; SC-002 | plan Testing row | T014 (group room, restart, unverified device, fallback) | DM test absent from T014 | partial -- `send-direct-message` E2EE path has no acceptance gate |
+| D7 store + lock + single owner | US1; FR-002; Edge Case "two processes" | data-model lock row; `KeyStoreUnavailableError` | T003, T004 | T013 store lock | covered |
+| D8 secret precedence / redaction | US2 AC1; FR-008 | data-model `RecoverySecret` | T006, T013 | T013 precedence, `SecretResolutionError`, redaction | covered |
+| D9 `IdentityExistsError`, `forceRecreate` | US2 AC3; FR-004 | data-model Errors | T007, T013 | T013 | covered |
+| D10 60 s + async `keyBackupRestore` | NFR-001; US5 | data-model `BootstrapStatus` | T007, T011, T013, T014 | T013 state transitions; T014(6) under 60 s | covered |
+| D11 `/health` + stubs | US5; FR-001, FR-009 | plan `src/main.rs` row; constitution VIII v2.0.2 | T011, T012 | T012 | covered |
+| D12 UTD marker | US4 AC3; FR-007; SC-006 | data-model `MessageDecryption` | T010, T013 | T013 names `[Encrypted message - unable to decrypt (missing_key)]` | covered |
+| D13 group-room gate 1, DM gate 2 | Edge Cases; SC-002 | plan Testing row | T014 | T014(1) group room; T014(5) DM gate | covered |
 | D14 Stage 2 bot | Followed By; constitution IX | 003 spec exists; no plan/tasks | -- | 003 SC-001..003 | deferred (intentional) |
-| D15 preserve existing behavior | SC-005; FR-001 | plan Constraints | T002, T012 | existing wiremock suite | covered; `tests/integration_tests.rs:29-56` `Config` struct literal will break when T003 adds fields |
-| `trustPolicy` param -> `TrustPolicyNotSatisfiedError` | US2 AC4 | yml; data-model Errors | implied by T011 | none | partial -- contract-only |
-| UIAA password for `/keys/device_signing/upload` | US2 AC2 | plan `src/config.rs` row | T003, T007 | Continuwuity manual (T014 does not name it) | partial |
+| D15 preserve existing behavior | SC-005; FR-001 | plan Constraints | T002, T003, T012, T015 | T003 updates the `Config` struct literal; T015 CI runs both builds | covered |
+| `trustPolicy` param -> `TrustPolicyNotSatisfiedError` | US2 AC4; SC-006 | yml; data-model Errors | T007, T013 | T013 | covered |
+| UIAA password for `/keys/device_signing/upload` | US2 AC2, AC5 | data-model `UiaaPassword`; yml `UiaaRequiredError` | T003, T007, T013, T014 | T013 `UiaaRequiredError`; T014(6) happy path | covered |
+
+Status column refreshed 2026-10-31 against the artifacts after the resolutions below. Sections 4 and 6 remain the 10-30 findings. Where this table says covered, those findings are closed. D14 stays deferred until 003 is planned.
 
 ## 4. Findings
 
@@ -123,6 +125,8 @@ D2 fail-closed, D8 redaction/precedence, D9 `IdentityExistsError`, D10 60 s / `k
 
 ## 6. Prioritized discrepancies
 
+Ranking as of 2026-10-30. Disposition is the section 3 status column: items 1 through 6 are closed, and item 7's constitution wording was closed by v2.0.2.
+
 1. Blocker: `feature.json` points at a non-existent path; about 55 doc cross-references stale; git shows originals deleted and renamed directories untracked.
 2. High: six October decisions have no test/verification task (D2 fail-closed, D8, D9, D10, D12 marker, D13 DM gate).
 3. High: `send-direct-message` E2EE path (US3/FR-006) has no acceptance gate because T014 omits the DM test the spec names.
@@ -140,9 +144,11 @@ D2 fail-closed, D8 redaction/precedence, D9 `IdentityExistsError`, D10 60 s / `k
 | Stale documents | Rewrite | `E2EE-Key-Management-Model.md` body (0.1, 2, 4, 5, 7, 8) now uses unified tool names and auto-fallback semantics; `keyBackupRestore` added to 7.1/7.2. `E2EE-Prep-Checklist` gained a superseded banner; the TOFU decision boxes now record the cross-signed decision. |
 | `SKIP_MATRIX_INIT` | Specify | `spec.md` Edge Cases, FR-004, FR-009; `data-model.md` `CryptoStoreState`; tasks T007, T011, T012. |
 
-Not changed (not in scope of the approved choices): constitution VIII wording ("when E2EE is enabled" vs FR-009 "always") remains a future amendment item.
+Not changed on 2026-10-30: constitution VIII wording ("when E2EE is enabled" vs FR-009 "always").
 
-Follow-up 2026-10-31: constitution amended to v2.0.1 (Security First hostile-network paragraph; E2EE target MSRV 1.96 -> 1.99, propagated to spec/plan/tasks, `Cargo.toml` comments, rules, and the October landscape review). `/speckit-analyze` Run 3 (`spec/Speckit-Analyze-Report-20261031.md`) found 0 critical/high; its two actionable findings were applied: T015 adds the CI matrix required by Principle VII, and `MATRIX_UIAA_PASSWORD_FILE` is now named in `data-model.md`, T003, and T014. The coverage matrix above is otherwise unchanged; the "UIAA password" row moves from partial to covered.
+Follow-up 2026-10-31: constitution amended to v2.0.1 (Security First hostile-network paragraph; E2EE target MSRV 1.96 -> 1.99). `/speckit-analyze` Run 3 found 0 critical/high; T015 and `MATRIX_UIAA_PASSWORD_FILE` were applied. Run 4 (`spec/Speckit-Analyze-Report-20261031-Run4.md`) verified 15 tasks at 100% coverage with four low nits.
+
+Follow-up 2026-10-31 (ambiguity close): constitution v2.0.2 makes Principle VIII match FR-009 (`/health` always includes both booleans). `UiaaRequiredError` is named in `spec.md` US2 AC5, `data-model.md`, T007, T013, and `spec/matrix-mcp-v1-v2.yml`. `.specify/specs/002-e2ee-cross-signing/contracts/README.md` points implement at `spec.md` and the yml. Run 4 nits applied: T015 states fmt once and clippy plus test per feature build, the dependency line says T015 blocks recording T014 complete, and the yml names `MATRIX_UIAA_PASSWORD_FILE`. The section 3 status column above was rewritten to this state. D14 (Stage 2 bot) remains the only deferred row.
 
 ## 7. Owner decisions requested (as posed before approval)
 

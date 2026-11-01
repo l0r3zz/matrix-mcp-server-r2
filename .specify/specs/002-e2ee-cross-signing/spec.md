@@ -58,6 +58,7 @@ When `E2EE_ENABLED=true`, the server automatically runs cross-signing bootstrap 
 2. **Given** no cross-signing identity on the homeserver and no secret, **When** bootstrap runs, **Then** an identity is created (using optional UIAA password if required by Continuwuity) and the recovery key is written to a 0600 file (`$CRYPTO_STORE_PATH/recovery-key`).
 3. **Given** an existing cross-signing identity on the homeserver and no resolvable secret, **When** bootstrap runs on a fresh store, **Then** it returns `IdentityExistsError` and does not replace the identity.
 4. **Given** `trustPolicy` other than `cross-signed`, **When** `bootstrap-e2ee` runs, **Then** it returns `TrustPolicyNotSatisfiedError`.
+5. **Given** the homeserver requires UIAA to create a cross-signing identity and `MATRIX_UIAA_PASSWORD_FILE` is unset or unreadable, **When** bootstrap runs, **Then** it returns `UiaaRequiredError` and does not create an identity.
 
 ### User Story 3 - E2EE-by-default room creation with pre-flight capability fallback (Priority: P1)
 
@@ -129,4 +130,4 @@ Existing tools (`send-message`, `send-direct-message`, `get-room-messages`, `get
 - **SC-003**: A non-cross-signed device in that encrypted room cannot decrypt the message (`m.room_key.withheld`).
 - **SC-004**: Calling `create-room` (`encryptionMode: "auto"`) with an unbootstrapped invitee cleanly falls back to an unencrypted room and reports `Encrypted: No (fallback: ...)`, while unencrypted rooms (e.g., `Fleet HQ Clean`) continue to work unchanged.
 - **SC-005**: Existing tests pass on both `--no-default-features` (non-`e2ee`) and `--features e2ee` builds on `matrix-sdk` 0.19.x.
-- **SC-006**: Automated tests (`T013`) cover every error-path decision: `/keys/query` network failure fails closed, recovery-secret precedence and `SecretResolutionError`, no secret material in logs or tool output, `IdentityExistsError` on a fresh store against an account that already has cross-signing, `keyBackupRestore` state transitions without blocking bootstrap, the `[Encrypted message - unable to decrypt (...)]` marker, and `trustPolicy != "cross-signed"` rejection.
+- **SC-006**: Automated tests (`T013`) cover every error-path decision: `/keys/query` network failure fails closed, recovery-secret precedence and `SecretResolutionError`, no secret material in logs or tool output, `IdentityExistsError` on a fresh store against an account that already has cross-signing, `UiaaRequiredError` when UIAA is required and `MATRIX_UIAA_PASSWORD_FILE` is unset or unreadable, `keyBackupRestore` state transitions without blocking bootstrap, the `[Encrypted message - unable to decrypt (...)]` marker, and `trustPolicy != "cross-signed"` rejection.
