@@ -5,7 +5,7 @@
 **Status**: Accepted
 **Supersedes**: `.specify/specs/001-e2ee-support/spec.md` (May 2026, `matrix-sdk` 0.10, optional cross-signing, Dendrite) and the earlier Two-Tier (`v1` refusal + `-r2` tool split) draft
 **Followed By**: `.specify/specs/003-integrated-matrix-bot/spec.md` (Stage 2: absorbing `matrix-bot-rust`'s reactive `/sync` -> Agent Zero `/api/api_message` loop into `src/bot/`)
-**Input**: Agent-Matrix needs `matrix-mcp-server-r2` as its unified Matrix gateway on secure networks. External MCP clients must get Cross-Signed E2EE by default on the existing 20 tool names without changing their call patterns, with automatic pre-flight `/keys/query` fallback to unencrypted rooms when an invitee lacks cross-signed E2EE keys. Trust policy inside encrypted rooms is strictly `cross-signed` (no `TOFU`). SDK target is `matrix-sdk` 0.19.x. Rust >= 1.96.
+**Input**: Agent-Matrix needs `matrix-mcp-server-r2` as its unified Matrix gateway on secure networks. External MCP clients must get Cross-Signed E2EE by default on the existing 20 tool names without changing their call patterns, with automatic pre-flight `/keys/query` fallback to unencrypted rooms when an invitee lacks cross-signed E2EE keys. Trust policy inside encrypted rooms is strictly `cross-signed` (no `TOFU`). SDK target is `matrix-sdk` 0.19.x. Rust >= 1.99.
 
 ## Role
 
@@ -24,7 +24,7 @@
 
 | Item | Requirement |
 |------|-------------|
-| Rust | >= 1.96 |
+| Rust | >= 1.99 (constitution v2.0.1 locked stack; `matrix-sdk` 0.19 floor is 1.96) |
 | `matrix-sdk` | 0.19.x, `e2e-encryption`, `bundled-sqlite`, rustls |
 | `matrix-sdk-crypto` | >= 0.16.1, satisfied by 0.19 (CVE-2026-45056) |
 | `rmcp` | Stay on 1.2 for this feature |
@@ -95,30 +95,31 @@ Existing tools (`send-message`, `send-direct-message`, `get-room-messages`, `get
 
 ### User Story 5 - Encryption status and health observability (Priority: P2)
 
-`get-encryption-status` reports device id, whether the device is cross-signed, crypto store state, whether a recovery source is configured, and (when `roomId` is provided) whether the room is encrypted and decryptable. `GET /health` includes `e2ee` and `crossSigned` booleans. Neither endpoint ever exposes secret material.
+`get-encryption-status` reports device id, whether the device is cross-signed, crypto store state, whether a recovery source is configured, `keyBackupRestore` progress (`not_started | running | done | failed`), and (when `roomId` is provided) whether the room is encrypted and decryptable. `GET /health` always includes `"e2ee": <bool>` and `"crossSigned": <bool>` (both `false` when compiled without `--features e2ee`, when `E2EE_ENABLED=false`, or when `SKIP_MATRIX_INIT=true`) for deterministic `am-ctl` health checks. When compiled without `--features e2ee`, `bootstrap-e2ee` and `get-encryption-status` return `"E2EE support not enabled; rebuild with --features e2ee"`. Neither endpoint ever exposes secret material.
 
 ## Edge Cases
 
 - **Wiped store, same old device id**: Do not reuse an old device id with newly generated identity keys. On a fresh store, align `.device-id` with `/whoami` (or a fresh login device) before uploading keys so `/keys/upload` never hits a changed signing key on an old id.
 - **Two processes, one store directory**: Refuse the second open (`KeyStoreUnavailableError`). Two clients on one device id both generate keys and only one is advertised. (Stage 2 `003-integrated-matrix-bot` absorbs `matrix-bot` into this single process for this exact reason.)
-- **Encrypted DMs**: Group-room success is the first gate (`SC-002`). DM is a second test. Continuwuity DM behavior is recorded as a homeserver result, never papered over by trusting unverified devices.
+- **Encrypted DMs**: Group-room success is the first gate (`SC-002`). DM is a second test (`T014`): `send-direct-message` with `encryptionMode: "auto"` to a cross-signed Continuwuity user must create an encrypted DM that round-trips with Element. Continuwuity DM behavior is recorded as a homeserver result, never papered over by trusting unverified devices.
+- **`SKIP_MATRIX_INIT=true`** (existing MCP-protocol-only mode): no crypto store is opened, no `.device-id` is written, and startup auto-bootstrap does not run. `GET /health` reports `"e2ee": false, "crossSigned": false`; `bootstrap-e2ee` and `get-encryption-status` return the same "Matrix not initialized" error the other tools return in this mode.
 
 ## Requirements
 
-- **FR-001**: E2EE code compiles with `--features e2ee` against `matrix-sdk` 0.19.x; non-`e2ee` builds continue to compile and serve unencrypted rooms.
+- **FR-001**: E2EE code compiles with `--features e2ee` against `matrix-sdk` 0.19.x; non-`e2ee` builds continue to compile and serve unencrypted rooms (with `#[cfg(not(feature = "e2ee"))]` fallback stubs on `bootstrap-e2ee` and `get-encryption-status` returning `"E2EE support not enabled; rebuild with --features e2ee"`).
 - **FR-002**: Store path comes from `CRYPTO_STORE_PATH` and is a persistent volume mount, not the process cwd.
 - **FR-003**: Device id is stored in `$CRYPTO_STORE_PATH/.device-id` and aligned with the access token's server-side `device_id` via `/_matrix/client/v3/account/whoami`.
-- **FR-004**: When `E2EE_ENABLED=true`, startup automatically runs cross-signing bootstrap (and `bootstrap-e2ee` remains callable as an MCP tool).
+- **FR-004**: When `E2EE_ENABLED=true` (and `SKIP_MATRIX_INIT` is not set), startup automatically runs cross-signing bootstrap (and `bootstrap-e2ee` remains callable as an MCP tool, with `forceRecreate: true` rotating the local SQLite store/device keys without resetting the server-side cross-signing identity).
 - **FR-005**: Inside encrypted rooms, outbound Megolm room keys go only to cross-signed devices (`TOFU` is forbidden).
 - **FR-006**: `create-room` and `send-direct-message` accept optional `encryptionMode` (`"auto"` default when E2EE is enabled, `"e2ee"`, `"none"`), performing a pre-flight `/keys/query` check in `"auto"` mode to enable E2EE when invitees are cross-signed or fall back to an unencrypted room when an invitee lacks E2EE keys.
 - **FR-007**: `send-message`, `get-room-messages`, `get-messages-by-date`, and `identify-active-users` transparently handle both encrypted and unencrypted rooms.
-- **FR-008**: Recovery material and passwords never appear in logs or tool results.
-- **FR-009**: `/health` includes `e2ee` (`bool`) and `crossSigned` (`bool`) when the `e2ee` feature is compiled in.
+- **FR-008**: Recovery material and passwords never appear in logs or tool results; `backupPassphraseRef` returns `SecretResolutionError` until a secret-manager backend is configured.
+- **FR-009**: `GET /health` always includes `"e2ee": <bool>` and `"crossSigned": <bool>` (both `false` when compiled without `--features e2ee`, when `E2EE_ENABLED=false`, or when `SKIP_MATRIX_INIT=true`).
 - **FR-010**: `rmcp` remains 1.2 in this feature.
 
 ### Non-functional
 
-- **NFR-001**: Cold bootstrap completes within 60 seconds, excluding a full historical key-backup download, which may run in the background and must be visible in status.
+- **NFR-001**: Cold bootstrap completes within 60 seconds by running historical key-backup restoration asynchronously in a non-blocking background task that updates `keyBackupRestore` (`not_started | running | done | failed`).
 - **NFR-002**: After restart with the same volume, previously decryptable history still decrypts.
 
 ## Success Criteria
@@ -128,3 +129,4 @@ Existing tools (`send-message`, `send-direct-message`, `get-room-messages`, `get
 - **SC-003**: A non-cross-signed device in that encrypted room cannot decrypt the message (`m.room_key.withheld`).
 - **SC-004**: Calling `create-room` (`encryptionMode: "auto"`) with an unbootstrapped invitee cleanly falls back to an unencrypted room and reports `Encrypted: No (fallback: ...)`, while unencrypted rooms (e.g., `Fleet HQ Clean`) continue to work unchanged.
 - **SC-005**: Existing tests pass on both `--no-default-features` (non-`e2ee`) and `--features e2ee` builds on `matrix-sdk` 0.19.x.
+- **SC-006**: Automated tests (`T013`) cover every error-path decision: `/keys/query` network failure fails closed, recovery-secret precedence and `SecretResolutionError`, no secret material in logs or tool output, `IdentityExistsError` on a fresh store against an account that already has cross-signing, `keyBackupRestore` state transitions without blocking bootstrap, the `[Encrypted message - unable to decrypt (...)]` marker, and `trustPolicy != "cross-signed"` rejection.

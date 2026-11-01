@@ -19,7 +19,7 @@ Unified Rust Matrix gateway for the Agent-Matrix fleet. Exposes 20 operational M
 - **Target (002-e2ee-cross-signing, starting at T001)**:
   - `matrix-sdk` = 0.19 (`rustls-tls`, optional `e2e-encryption` + `bundled-sqlite`)
   - `ruma` = follows `matrix-sdk` 0.19
-  - Rust edition 2021, MSRV >= 1.96
+  - Rust edition 2021, MSRV >= 1.99
 - **Current compiling pin (until T001)**:
   - `matrix-sdk` = 0.10, `ruma` = 0.12, Rust 1.88
 - **Locked across both**:

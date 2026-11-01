@@ -14,7 +14,7 @@
 | Room keys | Do not share room keys, or other encrypted to-device secrets, with a device that is not cross-signed. Withhold with `m.room_key.withheld` / `m.unverified` |
 | SDK | `matrix-sdk` 0.19.x (or newer), features `e2e-encryption` and `bundled-sqlite` |
 | Crypto floor | `matrix-sdk-crypto` >= 0.16.1 (CVE-2026-45056). The 0.19 line includes this |
-| Rust | >= 1.96 |
+| Rust | >= 1.99 (raised from 1.96 by constitution v2.0.1, 2026-10-31; the crate floor remains 1.96) |
 | MCP transport | `rmcp` stays at 1.2. The 3.x migration is a different project |
 | Homeserver | Continuwuity. First acceptance test is an encrypted group room, restart, still decrypts. A DM is the second test |
 | Device id | One id per agent, in `$CRYPTO_STORE_PATH/.device-id`. The literal `MCP_SERVER` is not allowed |
@@ -30,7 +30,7 @@ The compiling tree is still `matrix-sdk` 0.10 and Rust 1.88. That pin stays unti
 |------|----------------|--------------------|
 | Spec | `.specify/specs/002-e2ee-cross-signing/` (`spec.md`, `plan.md`, `data-model.md`, `tasks.md`) | May spec kept, marked superseded |
 | Trust | Cross-signed only. Recorded in the October spec, `spec/E2EE-Key-Management-Model.md`, `spec/matrix-mcp-v1-v2.yml`, and the constitution | No crypto store, no cross-signing, no E2EE management tools (`bootstrap-e2ee`, `get-encryption-status`) |
-| SDK | 0.19.x, Rust >= 1.96 | `Cargo.toml` still pins 0.10 / Rust 1.88 so `cargo build` works |
+| SDK | 0.19.x, Rust >= 1.99 | `Cargo.toml` still pins 0.10 / Rust 1.88 so `cargo build` works |
 | Device id | File beside the store | `src/matrix/client.rs` still restores `device_id: "MCP_SERVER"` for every process. Removal is task T002 |
 | Feature flag | `e2ee` gates the crypto build. A build without it still serves the 20 v1 tools | The flag only enables `matrix-sdk/e2e-encryption`. Nothing calls it |
 | Homeserver | Continuwuity group room first | Not yet tested |
@@ -137,7 +137,7 @@ Two version documents matter before writing against 0.19:
 
 Design for this decision is written. Code is not.
 
-1. T001 bumps `matrix-sdk` to 0.19 and `rust-version` to 1.96 together with the client call sites. `rmcp` stays at 1.2.
+1. T001 bumps `matrix-sdk` to 0.19 and `rust-version` to 1.99 together with the client call sites. `rmcp` stays at 1.2.
 2. T002 removes the `MCP_SERVER` device id. The id comes from the store file, not a constant.
 3. Store, cross-signing auto-bootstrap, and recipient strategy come before the unified tool E2EE upgrades and new `bootstrap-e2ee` / `get-encryption-status` tools.
 4. The Continuwuity group-room gate is last: encrypt, round-trip with Element, restart, history still decrypts. Record the DM result separately. A DM failure does not relax the trust policy.

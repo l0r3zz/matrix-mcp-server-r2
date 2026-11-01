@@ -8,7 +8,7 @@ Upgrade `matrix-mcp-server-r2` to `matrix-sdk` 0.19 with a bundled SQLite crypto
 
 ## Technical Context
 
-**Language/Version**: Rust >= 1.96, edition 2021
+**Language/Version**: Rust >= 1.99, edition 2021
 **Primary Dependencies**: `matrix-sdk` 0.19 (features `e2e-encryption`, `bundled-sqlite`, `rustls-tls`). `rmcp` 1.2. `ruma` as required by `matrix-sdk` 0.19
 **Storage**: One SQLite directory per agent at `CRYPTO_STORE_PATH`, plus `.device-id` and an optional `0600` `recovery-key` file
 **Testing**: `cargo test` without `e2ee`; `cargo test --features e2ee`; Continuwuity encrypted group-room and auto-fallback manual gate
@@ -49,8 +49,8 @@ src/matrix/client.rs    # 0.19 builder, /whoami .device-id, SQLite store, auto-b
 src/config.rs           # E2EE_ENABLED, CRYPTO_STORE_PATH, MATRIX_RECOVERY_KEY_FILE, optional UIAA password ref
 src/mcp/server.rs       # 20 unified tools (transparent E2EE + auto pre-flight fallback) + bootstrap-e2ee + get-encryption-status
 src/main.rs             # /health e2ee & crossSigned fields
-Cargo.toml              # matrix-sdk 0.19 pin and rust-version 1.96
-Dockerfile              # rust:1.96-bookworm builder image
+Cargo.toml              # matrix-sdk 0.19 pin and rust-version 1.99
+Dockerfile              # rust:1.99-bookworm builder image
 ```
 
 **Structure Decision**: Single crate. Crypto setup and startup auto-bootstrap live in `src/matrix/client.rs` (or a `src/matrix/e2ee.rs` submodule gated by `#[cfg(feature = "e2ee")]`). MCP tool handlers remain in `src/mcp/server.rs`.

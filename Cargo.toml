@@ -7,7 +7,7 @@ description = "Rust implementation of Matrix MCP Server - drop-in replacement fo
 license = "MIT"
 repository = "https://github.com/l0r3zz/matrix-mcp-server-r2"
 # Compiling pin remains 1.88 until the 0.19 client migration
-# (see .specify/specs/002-e2ee-cross-signing/tasks.md). E2EE target is Rust >= 1.96.
+# (see .specify/specs/002-e2ee-cross-signing/tasks.md). E2EE target is Rust >= 1.99.
 rust-version = "1.88"
 
 [dependencies]
@@ -23,7 +23,7 @@ tower-http = { version = "0.6", features = ["cors", "trace"] }
 rmcp = { version = "1.2", default-features = false, features = ["server", "macros", "transport-streamable-http-server"] }
 
 # Matrix SDK. Compiling pin is 0.10 so this tree still builds.
-# Agreed E2EE target (2026-10-23): matrix-sdk 0.19 (MSRV Rust 1.96),
+# Agreed E2EE target (2026-10-23): matrix-sdk 0.19 (crate MSRV 1.96; project pins Rust 1.99),
 # with e2e-encryption and bundled-sqlite. Do not ship E2EE on 0.10
 # (CVE-2026-45056 is fixed in matrix-sdk-crypto 0.16.1, which 0.19 includes).
 # rmcp stays at 1.2 for the E2EE feature. The version flip is the first

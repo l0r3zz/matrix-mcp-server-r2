@@ -4,7 +4,7 @@ Unified Rust Matrix gateway for the Agent-Matrix fleet. Exposes 20 operational M
 
 ## Stack
 
-- **Language**: Rust (edition 2021; compiling pin 1.88 until T001 bumps to >= 1.96)
+- **Language**: Rust (edition 2021; compiling pin 1.88 until T001 bumps to >= 1.99)
 - **Async**: Tokio
 - **HTTP**: Axum 0.8, Tower, tower-http (CORS, tracing)
 - **MCP**: rmcp 1.2 (StreamableHttpService + LocalSessionManager at `/mcp`)

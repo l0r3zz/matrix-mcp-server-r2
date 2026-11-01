@@ -80,6 +80,9 @@ rooms, Megolm room keys MUST go only to cross-signed devices (`TOFU` /
 `ignore_unverified_devices` is forbidden). Unencrypted room support and
 room-creation fallback operate strictly at the room state level
 (`m.room.encryption`), never by weakening device trust inside encrypted rooms.
+This software is built to be reliable and resilient as traffic to and from may pass
+through an insecure and potentially hostile network. Consideration of any feature
+implemented must keep "Security First" as a major guiding implementation principle.
 
 ### VI. Transparent Encryption
 
@@ -130,7 +133,7 @@ Changing a locked version requires a constitution amendment.
 
 | Component | Choice | Version |
 |-----------|--------|---------|
-| Language | Rust | 2021 edition. E2EE target MSRV 1.96. Compiling pin is still 1.88 until the 0.19 migration |
+| Language | Rust | 2021 edition. E2EE target MSRV 1.99 (current stable at amendment time; `matrix-sdk` 0.19 itself requires >= 1.96). Compiling pin is still 1.88 until the 0.19 migration |
 | MCP SDK | rmcp | 1.2 (do not bump to 3.x as part of E2EE) |
 | HTTP | axum + tower-http | 0.8 / 0.6 |
 | Matrix SDK | matrix-sdk | E2EE target 0.19.x with `e2e-encryption` and `bundled-sqlite`. Compiling pin is still 0.10 |
@@ -221,4 +224,4 @@ Compliance review: a change that touches tool contracts, crypto, or the
 implementation. A locked stack version MUST NOT change inside a feature
 spec. That change requires an amendment here first.
 
-**Version**: 2.0.0 | **Ratified**: 2026-05-11 | **Last Amended**: 2026-10-29
+**Version**: 2.0.1 | **Ratified**: 2026-05-11 | **Last Amended**: 2026-10-31

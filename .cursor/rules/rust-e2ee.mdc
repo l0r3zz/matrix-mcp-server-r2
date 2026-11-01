@@ -12,7 +12,7 @@ This is `matrix-mcp-server-r2`, the unified Rust Matrix MCP gateway for the Agen
 
 ### Crate Versions (pin these in all code and suggestions)
 
-- E2EE target: `matrix-sdk` 0.19.x, Rust >= 1.96, `e2e-encryption` + `bundled-sqlite` + `rustls-tls`
+- E2EE target: `matrix-sdk` 0.19.x, Rust >= 1.99, `e2e-encryption` + `bundled-sqlite` + `rustls-tls`
 - Crypto floor: `matrix-sdk-crypto` >= 0.16.1 (CVE-2026-45056). The 0.19 line meets this
 - `rmcp` stays 1.2 for this feature. Do not mix in the 3.x migration
 - `ruma` follows `matrix-sdk` 0.19. Do not keep an independent 0.12 pin after the bump

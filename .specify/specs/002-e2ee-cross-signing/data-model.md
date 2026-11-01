@@ -21,10 +21,10 @@ Losing the directory loses decryptability of sessions that were not in server-si
 - **DeviceIdentity**: `deviceId`, Ed25519 fingerprint, Curve25519 identity key. Uploaded only after `.device-id` and the SQLite store are opened together and verified against `/whoami`.
 - **CrossSigningIdentity**: Master, self-signing, and user-signing keys in Matrix Secret Storage. Either restored from the recovery secret on startup/bootstrap or created once when the account has none.
 - **RecoverySecret**: Resolved in strict precedence order:
-  1. `backupPassphraseRef` (secret manager reference, if configured)
+  1. `backupPassphraseRef` (secret manager reference; returns `SecretResolutionError` until an external secret-manager backend is configured)
   2. `backupPassphraseEnvVar` (name of environment variable holding the secret)
   3. `MATRIX_RECOVERY_KEY_FILE` (file path on the store volume, default `$CRYPTO_STORE_PATH/recovery-key`)
-  Never logged or returned in any MCP tool response.
+  Never logged or returned in any MCP tool response. If `forceRecreate: true` is passed to `bootstrap-e2ee`, the local SQLite store and device keys are rotated without resetting the server-side cross-signing identity (still requiring the recovery secret if an account cross-signing identity exists).
 
 ## Tool-Visible State
 
@@ -35,7 +35,7 @@ Losing the directory loses decryptability of sessions that were not in server-si
 
 - **`TrustPolicy`**: Fixed single value `"cross-signed"`. (`"tofu"` is rejected.)
 
-- **`CryptoStoreState`**: `"missing"` | `"ready"` | `"corrupt"` | `"unreadable"`.
+- **`CryptoStoreState`**: `"missing"` | `"ready"` | `"corrupt"` | `"unreadable"`. When `SKIP_MATRIX_INIT=true` no store is opened; `/health` reports `e2ee: false, crossSigned: false` and the management tools return the "Matrix not initialized" error.
 
 - **`BootstrapStatus`** (returned by `bootstrap-e2ee` and reflected in `get-encryption-status`):
   - `deviceId` (`String`)

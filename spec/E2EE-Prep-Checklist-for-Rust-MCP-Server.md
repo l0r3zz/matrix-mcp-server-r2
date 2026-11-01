@@ -1,5 +1,7 @@
 # E2EE Prep Checklist for Rust Matrix MCP Server
 
+> **Superseded (2026-10-30).** This checklist captures the May 2026 two-tier design (`-r2` tool split, `EncryptedRoomError` refusal, `encryption_mode` defaulting to `none`, TOFU for DMs). Those choices were replaced on 2026-10-29 by the unified E2EE-by-default design: the existing 20 tools handle encrypted and unencrypted rooms transparently, `create-room` / `send-direct-message` default to `encryptionMode: "auto"` with `/keys/query` pre-flight fallback, and trust is strictly cross-signed. Treat sections 1, 2, 6, 7.1 (trust mode), 7.5, and 7.6 below as historical. Current sources: `.specify/specs/002-e2ee-cross-signing/spec.md`, `spec/matrix-mcp-v1-v2.yml`, `spec/E2EE-Key-Management-Model.md` section 0. The background-reading sections (3, 4, 5) and the key-lifecycle items in 7.2-7.4 remain useful.
+
 ## 1. Spec and API Design
 
 - [ ] Confirm versioning strategy:
@@ -226,9 +228,9 @@ If these are not decided up front, E2EE behavior will be fragile in production.
   - [ ] One persistent Matrix device per agent instance (recommended).
   - [ ] Device ID must be deterministic per instance (stable across restarts).
   - [ ] Device ID must NOT be shared across different agents.
-- [ ] Decide trust mode for first release:
-  - [x] TOFU (trust on first use) for agent-human DMs.
-  - [x] Strict verification mode deferred to later release.
+- [x] Decide trust mode for first release (decided 2026-10-23, superseding the earlier TOFU choice):
+  - [x] Cross-signed only. TOFU and `ignore_unverified_devices` are forbidden (`.specify/memory/constitution.md` Principle V).
+  - [x] No separate "strict" mode; cross-signed is the only mode.
 
 ### 7.2 Crypto Store Model
 
