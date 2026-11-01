@@ -86,3 +86,4 @@ None. T001-T014 each map to at least one requirement, story, edge case, or succe
 - Recommended before implementing (small edits, not blocking): add a CI matrix task for both feature builds (C1); name the UIAA password variable in `data-model.md` and T003 (U1).
 - Optional at the next constitution amendment: tighten Principle VIII to "always include" (I1).
 - Remediation applied 2026-10-31 after owner approval: C1 -> new T015 (`.github/workflows/ci.yml`, fmt/clippy/test matrix on both feature builds; T012/T013 block T015) plus plan.md Constitution Check and source-map entries; U1 -> `MATRIX_UIAA_PASSWORD_FILE` named in `data-model.md` (UiaaPassword), T003, T014(6), and `plan.md`. I1 left for a future constitution amendment. Task count is now 15.
+- Superseded by `spec/Speckit-Analyze-Report-20261031-Run4.md` (Run 4, post-remediation verification).
