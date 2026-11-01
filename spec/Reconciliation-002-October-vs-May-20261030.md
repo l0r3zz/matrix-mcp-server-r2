@@ -140,7 +140,9 @@ D2 fail-closed, D8 redaction/precedence, D9 `IdentityExistsError`, D10 60 s / `k
 | Stale documents | Rewrite | `E2EE-Key-Management-Model.md` body (0.1, 2, 4, 5, 7, 8) now uses unified tool names and auto-fallback semantics; `keyBackupRestore` added to 7.1/7.2. `E2EE-Prep-Checklist` gained a superseded banner; the TOFU decision boxes now record the cross-signed decision. |
 | `SKIP_MATRIX_INIT` | Specify | `spec.md` Edge Cases, FR-004, FR-009; `data-model.md` `CryptoStoreState`; tasks T007, T011, T012. |
 
-Not changed (not in scope of the approved choices): constitution VIII wording ("when E2EE is enabled" vs FR-009 "always") would need a PATCH amendment to 2.0.1; `spec/Speckit-Analyze-Report-20261029.md` predates these edits (requirement count is now 23) and should be regenerated with `/speckit-analyze` before `/speckit-implement`.
+Not changed (not in scope of the approved choices): constitution VIII wording ("when E2EE is enabled" vs FR-009 "always") remains a future amendment item.
+
+Follow-up 2026-10-31: constitution amended to v2.0.1 (Security First hostile-network paragraph; E2EE target MSRV 1.96 -> 1.99, propagated to spec/plan/tasks, `Cargo.toml` comments, rules, and the October landscape review). `/speckit-analyze` Run 3 (`spec/Speckit-Analyze-Report-20261031.md`) found 0 critical/high; its two actionable findings were applied: T015 adds the CI matrix required by Principle VII, and `MATRIX_UIAA_PASSWORD_FILE` is now named in `data-model.md`, T003, and T014. The coverage matrix above is otherwise unchanged; the "UIAA password" row moves from partial to covered.
 
 ## 7. Owner decisions requested (as posed before approval)
 

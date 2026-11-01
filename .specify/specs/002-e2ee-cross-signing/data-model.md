@@ -25,6 +25,7 @@ Losing the directory loses decryptability of sessions that were not in server-si
   2. `backupPassphraseEnvVar` (name of environment variable holding the secret)
   3. `MATRIX_RECOVERY_KEY_FILE` (file path on the store volume, default `$CRYPTO_STORE_PATH/recovery-key`)
   Never logged or returned in any MCP tool response. If `forceRecreate: true` is passed to `bootstrap-e2ee`, the local SQLite store and device keys are rotated without resetting the server-side cross-signing identity (still requiring the recovery secret if an account cross-signing identity exists).
+- **UiaaPassword**: Optional. Read from the file named by `MATRIX_UIAA_PASSWORD_FILE` (mode `0600` on the store volume). Used only to satisfy User-Interactive Auth on `POST /_matrix/client/v3/keys/device_signing/upload` when creating a new cross-signing identity. Never logged, never returned, never accepted as a raw MCP argument. Absent when the account already has cross-signing or when Continuwuity does not require UIAA.
 
 ## Tool-Visible State
 

@@ -24,6 +24,7 @@ Upgrade `matrix-mcp-server-r2` to `matrix-sdk` 0.19 with a bundled SQLite crypto
 - **Principle II (Feature-Gated E2EE)**: All E2EE paths gated behind `--features e2ee`; auto-bootstraps on startup when `E2EE_ENABLED=true`.
 - **Principle IV (Matrix SDK as Crypto Authority)**: Crypto stays inside `matrix-sdk` 0.19 (`vodozemac` + bundled SQLite).
 - **Principle V (Security First)**: Secrets stay off the tool channel and logs; Megolm keys go only to cross-signed devices.
+- **Principle VII (Test Everything)**: E2EE tests gated by `#[cfg(feature = "e2ee")]`; CI runs both feature builds (T015).
 - **Principle IX (Incremental Delivery)**: `002` delivers the unified E2EE MCP server; `003` absorbs `matrix-bot-rust` into `src/bot/`.
 
 ## Project Structure
@@ -46,7 +47,8 @@ spec/E2EE-Key-Management-Model.md  # Operator key model
 
 ```text
 src/matrix/client.rs    # 0.19 builder, /whoami .device-id, SQLite store, auto-bootstrap, recipient strategy, sync
-src/config.rs           # E2EE_ENABLED, CRYPTO_STORE_PATH, MATRIX_RECOVERY_KEY_FILE, optional UIAA password ref
+src/config.rs           # E2EE_ENABLED, CRYPTO_STORE_PATH, MATRIX_RECOVERY_KEY_FILE, optional MATRIX_UIAA_PASSWORD_FILE
+.github/workflows/ci.yml # fmt, clippy, cargo test with and without --features e2ee (Principle VII)
 src/mcp/server.rs       # 20 unified tools (transparent E2EE + auto pre-flight fallback) + bootstrap-e2ee + get-encryption-status
 src/main.rs             # /health e2ee & crossSigned fields
 Cargo.toml              # matrix-sdk 0.19 pin and rust-version 1.99
