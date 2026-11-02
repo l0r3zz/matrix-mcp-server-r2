@@ -5,6 +5,9 @@
 # Rust build artifacts
 target/
 *.rs.bk
+*.rlib
+*.prof*
+*.tmp
 
 # Node.js (reference TS source)
 node_modules/

@@ -58,7 +58,7 @@ exposes Matrix operations as MCP tools over the Streamable HTTP transport.
 | Language | Rust 2021 edition |
 | MCP SDK | rmcp 1.2 (official Rust MCP SDK) |
 | HTTP | axum + tower-http |
-| Matrix SDK | matrix-sdk 0.10 |
+| Matrix SDK | matrix-sdk 0.19 (`e2ee` feature off unless requested) |
 | Serialization | serde + schemars |
 | Error Handling | thiserror |
 | Logging | tracing |

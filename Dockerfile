@@ -16,9 +16,9 @@
 # =============================================================================
 
 # ---- Stage 1: Build ----
-# Toolchain floor is set by transitive deps (e.g. `darling`, `time` require rustc 1.88+;
-# `base64ct` needs Cargo that understands edition2024).
-FROM rust:1.88-bookworm AS builder
+# MSRV is Rust 1.99 (matrix-sdk 0.19 requires >= 1.96; edition2024 crates
+# need a Cargo newer than 1.82).
+FROM rust:1.99-bookworm AS builder
 
 WORKDIR /build
 
@@ -27,7 +27,7 @@ RUN rustc --version && cargo --version
 
 # Fail fast if the builder somehow still has Cargo 1.82 (stale cache or wrong FROM).
 RUN cargo --version | grep -qv 'cargo 1\.82' || \
-    (echo "ERROR: Cargo 1.82 cannot build edition2024 crates. Use FROM rust:1.88-bookworm+ and clear GHA Docker cache." >&2; exit 1)
+    (echo "ERROR: Cargo 1.82 cannot build edition2024 crates. Use FROM rust:1.99-bookworm and clear GHA Docker cache." >&2; exit 1)
 
 # Cache dependency compilation: copy manifests first, build a dummy main,
 # then copy real sources. This way cargo only re-downloads/re-compiles deps

@@ -4,11 +4,11 @@ Unified Rust Matrix gateway for the Agent-Matrix fleet. Exposes 20 operational M
 
 ## Stack
 
-- **Language**: Rust (edition 2021; compiling pin 1.88 until T001 bumps to >= 1.99)
+- **Language**: Rust (edition 2021, MSRV 1.99)
 - **Async**: Tokio
 - **HTTP**: Axum 0.8, Tower, tower-http (CORS, tracing)
 - **MCP**: rmcp 1.2 (StreamableHttpService + LocalSessionManager at `/mcp`)
-- **Matrix**: matrix-sdk (compiling pin 0.10 until T001 bumps to 0.19 with `rustls-tls`, `e2e-encryption`, `bundled-sqlite`), ruma
+- **Matrix**: matrix-sdk 0.19 (`rustls-aws-lc-rs`; `e2e-encryption` and `bundled-sqlite` only behind the `e2ee` feature), ruma 0.17
 - **Schemas**: schemars, serde, serde_json
 - **Errors**: thiserror, anyhow
 

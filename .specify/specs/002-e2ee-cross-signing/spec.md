@@ -28,7 +28,7 @@
 | `matrix-sdk` | 0.19.x, `e2e-encryption`, `bundled-sqlite`, rustls |
 | `matrix-sdk-crypto` | >= 0.16.1, satisfied by 0.19 (CVE-2026-45056) |
 | `rmcp` | Stay on 1.2 for this feature |
-| Compiling tree today | Still `matrix-sdk` 0.10 / Rust 1.88 until task T001 |
+| Compiling tree | `matrix-sdk` 0.19 / Rust 1.99 as of T001. E2EE behavior stays off until later tasks |
 
 Do not implement Olm or Megolm. Do not construct a standalone `OlmMachine` next to `Client`.
 

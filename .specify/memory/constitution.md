@@ -135,10 +135,10 @@ Changing a locked version requires a constitution amendment.
 
 | Component | Choice | Version |
 |-----------|--------|---------|
-| Language | Rust | 2021 edition. E2EE target MSRV 1.99 (current stable at amendment time; `matrix-sdk` 0.19 itself requires >= 1.96). Compiling pin is still 1.88 until the 0.19 migration |
+| Language | Rust | 2021 edition. Compiling pin is 1.99 (`matrix-sdk` 0.19 itself requires >= 1.96) |
 | MCP SDK | rmcp | 1.2 (do not bump to 3.x as part of E2EE) |
 | HTTP | axum + tower-http | 0.8 / 0.6 |
-| Matrix SDK | matrix-sdk | E2EE target 0.19.x with `e2e-encryption` and `bundled-sqlite`. Compiling pin is still 0.10 |
+| Matrix SDK | matrix-sdk | Compiling pin 0.19.x. TLS feature is `rustls-aws-lc-rs` (0.19 renamed `rustls-tls`). `e2e-encryption` and `bundled-sqlite` are enabled only by the `e2ee` Cargo feature |
 | Crypto floor | matrix-sdk-crypto | >= 0.16.1 (included in 0.19; CVE-2026-45056) |
 | Matrix types | ruma | Follows matrix-sdk 0.19. Do not keep an independent 0.12 pin after the bump |
 | Serialization | serde + schemars | 1.0 / 1 |
@@ -226,4 +226,4 @@ Compliance review: a change that touches tool contracts, crypto, or the
 implementation. A locked stack version MUST NOT change inside a feature
 spec. That change requires an amendment here first.
 
-**Version**: 2.0.2 | **Ratified**: 2026-05-11 | **Last Amended**: 2026-10-31
+**Version**: 2.0.3 | **Ratified**: 2026-05-11 | **Last Amended**: 2026-11-01
