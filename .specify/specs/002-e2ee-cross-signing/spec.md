@@ -1,7 +1,7 @@
 # Feature Specification: Unified Cross-Signed E2EE MCP Server
 
 **Feature Branch**: `002-e2ee-cross-signing`
-**Created**: 2026-10-23 | **Updated**: 2026-10-29
+**Created**: 2026-10-23 | **Updated**: 2026-11-01
 **Status**: Accepted
 **Supersedes**: `.specify/specs/001-e2ee-support/spec.md` (May 2026, `matrix-sdk` 0.10, optional cross-signing, Dendrite) and the earlier Two-Tier (`v1` refusal + `-r2` tool split) draft
 **Followed By**: `.specify/specs/003-integrated-matrix-bot/spec.md` (Stage 2: absorbing `matrix-bot-rust`'s reactive `/sync` -> Agent Zero `/api/api_message` loop into `src/bot/`)
@@ -9,7 +9,7 @@
 
 ## Role
 
-`matrix-mcp-server-r2` is the Matrix gateway for the Agent-Matrix fleet. The 20 operational MCP tools (`create-room`, `send-direct-message`, `send-message`, `get-room-messages`, `get-messages-by-date`, `identify-active-users`, etc.) transparently handle both encrypted (`m.room.encryption`) and unencrypted rooms. Two dedicated management tools (`bootstrap-e2ee` and `get-encryption-status`) provide explicit bootstrap control and readiness inspection. Public-network TOFU bots are out of scope.
+`matrix-mcp-server-r2` is the Matrix gateway for the Agent-Matrix fleet. This feature upgrades that server in place on branch `002-e2ee-cross-signing` (forked from `main`): T001 is the first code change, and the existing 20 tools, wiremock tests, and build without `--features e2ee` stay. The 20 operational MCP tools (`create-room`, `send-direct-message`, `send-message`, `get-room-messages`, `get-messages-by-date`, `identify-active-users`, etc.) transparently handle both encrypted (`m.room.encryption`) and unencrypted rooms. Two dedicated management tools (`bootstrap-e2ee` and `get-encryption-status`) provide explicit bootstrap control and readiness inspection. Public-network TOFU bots are out of scope.
 
 ## Prior Art (evaluated 2026-10-23)
 

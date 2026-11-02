@@ -44,3 +44,6 @@ Thumbs.db
 __pycache__/
 venv/
 *.pyc
+
+# Local spec baseline (not a contract; kept out of git)
+.specify/specs/002-e2ee-cross-signing/spec.md.baseline
