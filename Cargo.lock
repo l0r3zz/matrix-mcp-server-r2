@@ -1970,6 +1970,7 @@ dependencies = [
  "chrono",
  "dotenvy",
  "matrix-sdk",
+ "matrix-sdk-base",
  "regex",
  "rmcp",
  "ruma",

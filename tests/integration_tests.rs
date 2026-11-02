@@ -7,10 +7,8 @@
 use matrix_mcp_server_r2::config::Config;
 use matrix_mcp_server_r2::mcp::server::*;
 use matrix_sdk::{
-    authentication::matrix::MatrixSession,
-    config::SyncSettings,
-    store::RoomLoadSettings,
-    Client, SessionMeta, SessionTokens,
+    authentication::matrix::MatrixSession, config::SyncSettings, store::RoomLoadSettings, Client,
+    SessionMeta, SessionTokens,
 };
 use rmcp::handler::server::wrapper::Parameters;
 use ruma::{OwnedDeviceId, OwnedUserId};
@@ -51,6 +49,8 @@ fn test_config(homeserver_url: &str) -> Arc<Config> {
         mcp_server_url: None,
         e2ee_enabled: false,
         crypto_store_path: None,
+        recovery_key_file: None,
+        uiaa_password_file: None,
         debug: false,
         skip_matrix_init: false,
     })
@@ -212,6 +212,20 @@ async fn mount_base_mocks(mock: &MockServer, sync_body: serde_json::Value) {
         .respond_with(ResponseTemplate::new(200).set_body_json(json!({ "global": {} })))
         .mount(mock)
         .await;
+
+    // With the e2ee feature, room.send asks whether m.room.encryption is set.
+    // A Matrix M_NOT_FOUND means the room is not encrypted. A bare 404 body is
+    // not that answer and fails the send.
+    Mock::given(method("GET"))
+        .and(path_regex::PathRegexMatcher::new(
+            r"/_matrix/client/v3/rooms/.*/state/m\.room\.encryption/?$",
+        ))
+        .respond_with(ResponseTemplate::new(404).set_body_json(json!({
+            "errcode": "M_NOT_FOUND",
+            "error": "Event not found."
+        })))
+        .mount(mock)
+        .await;
 }
 
 /// Create a matrix-sdk Client connected to the given wiremock server,
@@ -267,8 +281,16 @@ async fn test_list_joined_rooms_with_one_room() {
 
     let result = server.list_joined_rooms().await.expect("tool call failed");
     let text = format!("{:?}", result);
-    assert!(text.contains("Test Room"), "Expected room name in output: {}", text);
-    assert!(text.contains("!testroom:localhost"), "Expected room ID in output: {}", text);
+    assert!(
+        text.contains("Test Room"),
+        "Expected room name in output: {}",
+        text
+    );
+    assert!(
+        text.contains("!testroom:localhost"),
+        "Expected room ID in output: {}",
+        text
+    );
 }
 
 #[tokio::test]
@@ -281,7 +303,11 @@ async fn test_list_joined_rooms_empty() {
 
     let result = server.list_joined_rooms().await.expect("tool call failed");
     let text = format!("{:?}", result);
-    assert!(text.contains("No joined rooms"), "Expected empty message: {}", text);
+    assert!(
+        text.contains("No joined rooms"),
+        "Expected empty message: {}",
+        text
+    );
 }
 
 #[tokio::test]
@@ -298,7 +324,11 @@ async fn test_get_room_info() {
     let result = server.get_room_info(input).await.expect("tool call failed");
     let text = format!("{:?}", result);
     assert!(text.contains("Test Room"), "Expected room name: {}", text);
-    assert!(text.contains("A test room for integration tests"), "Expected topic: {}", text);
+    assert!(
+        text.contains("A test room for integration tests"),
+        "Expected topic: {}",
+        text
+    );
 }
 
 #[tokio::test]
@@ -357,9 +387,16 @@ async fn test_get_room_members() {
     let input = Parameters(RoomIdInput {
         room_id: "!testroom:localhost".into(),
     });
-    let result = server.get_room_members(input).await.expect("tool call failed");
+    let result = server
+        .get_room_members(input)
+        .await
+        .expect("tool call failed");
     let text = format!("{:?}", result);
-    assert!(text.contains("Alice"), "Expected Alice in members: {}", text);
+    assert!(
+        text.contains("Alice"),
+        "Expected Alice in members: {}",
+        text
+    );
     assert!(text.contains("Bob"), "Expected Bob in members: {}", text);
 }
 
@@ -368,17 +405,15 @@ async fn test_get_my_profile() {
     let mock = MockServer::start().await;
     mount_base_mocks(&mock, sync_response_one_room()).await;
     Mock::given(method("GET"))
-        .and(path("/_matrix/client/v3/profile/@bot:localhost/displayname"))
-        .respond_with(
-            ResponseTemplate::new(200).set_body_json(json!({ "displayname": "MCP Bot" })),
-        )
+        .and(path(
+            "/_matrix/client/v3/profile/@bot:localhost/displayname",
+        ))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({ "displayname": "MCP Bot" })))
         .mount(&mock)
         .await;
     Mock::given(method("GET"))
         .and(path("/_matrix/client/v3/profile/@bot:localhost/avatar_url"))
-        .respond_with(
-            ResponseTemplate::new(200).set_body_json(json!({})),
-        )
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({})))
         .mount(&mock)
         .await;
 
@@ -387,8 +422,16 @@ async fn test_get_my_profile() {
 
     let result = server.get_my_profile().await.expect("tool call failed");
     let text = format!("{:?}", result);
-    assert!(text.contains("MCP Bot") || text.contains("@bot:localhost"), "Expected profile info: {}", text);
-    assert!(text.contains("Joined Rooms"), "Expected room count: {}", text);
+    assert!(
+        text.contains("MCP Bot") || text.contains("@bot:localhost"),
+        "Expected profile info: {}",
+        text
+    );
+    assert!(
+        text.contains("Joined Rooms"),
+        "Expected room count: {}",
+        text
+    );
 }
 
 #[tokio::test]
@@ -421,9 +464,7 @@ async fn test_send_message() {
         .and(path_regex::PathRegexMatcher::new(
             r"/_matrix/client/v3/rooms/.*/send/m.room.message/.*",
         ))
-        .respond_with(
-            ResponseTemplate::new(200).set_body_json(json!({ "event_id": "$sent1" })),
-        )
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({ "event_id": "$sent1" })))
         .mount(&mock)
         .await;
 
@@ -438,8 +479,51 @@ async fn test_send_message() {
     });
     let result = server.send_message(input).await.expect("tool call failed");
     let text = format!("{:?}", result);
-    assert!(text.contains("sent successfully"), "Expected success message: {}", text);
+    assert!(
+        text.contains("sent successfully"),
+        "Expected success message: {}",
+        text
+    );
     assert!(text.contains("$sent1"), "Expected event ID: {}", text);
+    assert!(
+        text.contains("Encrypted: No"),
+        "Expected plaintext label: {}",
+        text
+    );
+}
+
+#[cfg(not(feature = "e2ee"))]
+#[tokio::test]
+async fn e2ee_tools_report_the_rebuild_stub() {
+    let mock = MockServer::start().await;
+    mount_base_mocks(&mock, sync_response_empty()).await;
+    let client = create_test_client(&mock).await;
+    let server = build_server(client, &mock.uri());
+
+    let bootstrap = server
+        .bootstrap_e2ee(Parameters(BootstrapE2eeInput {
+            force_recreate: false,
+            trust_policy: None,
+            backup_passphrase_env_var: None,
+            backup_passphrase_ref: None,
+        }))
+        .await
+        .expect("bootstrap tool");
+    let bootstrap_text = format!("{bootstrap:?}");
+    assert!(
+        bootstrap_text.contains("E2EE support not enabled; rebuild with --features e2ee"),
+        "stub missing: {bootstrap_text}"
+    );
+
+    let status = server
+        .get_encryption_status(Parameters(GetEncryptionStatusInput { room_id: None }))
+        .await
+        .expect("status tool");
+    let status_text = format!("{status:?}");
+    assert!(
+        status_text.contains("E2EE support not enabled; rebuild with --features e2ee"),
+        "stub missing: {status_text}"
+    );
 }
 
 // Helper: wiremock path_regex matcher (not in wiremock::matchers by default)

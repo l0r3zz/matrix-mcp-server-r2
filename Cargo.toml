@@ -28,6 +28,9 @@ rmcp = { version = "1.2", default-features = false, features = ["server", "macro
 # matrix-sdk-crypto 0.16.1, which 0.19 includes. rmcp stays at 1.2.
 # ruma follows matrix-sdk 0.19 (0.17). There is no umbrella `compat` feature.
 matrix-sdk = { version = "0.19", default-features = false, features = ["rustls-aws-lc-rs"] }
+# Direct dependency so the e2ee feature can name CollectStrategy and
+# TrustRequirement. Cargo already builds this crate for matrix-sdk.
+matrix-sdk-base = { version = "0.19", optional = true, default-features = false }
 ruma = { version = "0.17", features = ["client-api-c"] }
 
 # Serialization & Schema
@@ -63,7 +66,11 @@ regex = "1"
 
 [features]
 default = []
-e2ee = ["matrix-sdk/e2e-encryption", "matrix-sdk/bundled-sqlite"]
+e2ee = [
+    "matrix-sdk/e2e-encryption",
+    "matrix-sdk/bundled-sqlite",
+    "matrix-sdk-base/e2e-encryption",
+]
 
 [profile.release]
 opt-level = 3

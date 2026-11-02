@@ -8,6 +8,7 @@ use tracing::{debug, info};
 const CLIENT_TTL: Duration = Duration::from_secs(15 * 60); // 15 minutes
 const CLEANUP_INTERVAL: Duration = Duration::from_secs(5 * 60); // 5 minutes
 
+#[allow(dead_code)]
 #[derive(Clone)]
 struct CachedClient {
     client: Client,
@@ -21,6 +22,13 @@ pub struct ClientCache {
     entries: Arc<RwLock<HashMap<String, CachedClient>>>,
 }
 
+impl Default for ClientCache {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+#[allow(dead_code)]
 impl ClientCache {
     pub fn new() -> Self {
         Self {

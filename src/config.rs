@@ -1,6 +1,7 @@
 use crate::error::{AppError, Result};
 use std::env;
 
+#[allow(dead_code)]
 #[derive(Debug, Clone)]
 pub struct Config {
     pub matrix_homeserver_url: String,
@@ -28,6 +29,13 @@ pub struct Config {
 
     pub e2ee_enabled: bool,
     pub crypto_store_path: Option<String>,
+    /// Recovery-key file path. Defaults to `$CRYPTO_STORE_PATH/recovery-key`
+    /// when a store path is set. The file contents are never read or logged here.
+    pub recovery_key_file: Option<String>,
+    /// Optional path to a mode-0600 file holding the account password.
+    /// Used later for UIAA on `/keys/device_signing/upload`. The password is
+    /// never read or logged during configuration.
+    pub uiaa_password_file: Option<String>,
     pub debug: bool,
 
     /// When true, start the MCP server without connecting to Matrix.
@@ -58,7 +66,11 @@ impl Config {
         }
 
         let matrix_access_token = env::var("MATRIX_ACCESS_TOKEN").unwrap_or_else(|_| {
-            if skip_matrix_init { "skip".into() } else { String::new() }
+            if skip_matrix_init {
+                "skip".into()
+            } else {
+                String::new()
+            }
         });
         if matrix_access_token.is_empty() {
             return Err(AppError::Config(
@@ -67,7 +79,11 @@ impl Config {
         }
 
         let matrix_user_id = env::var("MATRIX_USER_ID").unwrap_or_else(|_| {
-            if skip_matrix_init { "@mcp:localhost".into() } else { String::new() }
+            if skip_matrix_init {
+                "@mcp:localhost".into()
+            } else {
+                String::new()
+            }
         });
         if matrix_user_id.is_empty() {
             return Err(AppError::Config(
@@ -80,6 +96,9 @@ impl Config {
             .ok()
             .and_then(|p| p.parse().ok())
             .unwrap_or(3000);
+
+        let crypto_store_path = nonempty_env("CRYPTO_STORE_PATH");
+        let recovery_key_file = recovery_key_file_from_env(crypto_store_path.as_deref());
 
         Ok(Config {
             matrix_homeserver_url,
@@ -111,7 +130,9 @@ impl Config {
             e2ee_enabled: env::var("E2EE_ENABLED")
                 .map(|v| v == "true" || v == "1")
                 .unwrap_or(false),
-            crypto_store_path: env::var("CRYPTO_STORE_PATH").ok(),
+            crypto_store_path,
+            recovery_key_file,
+            uiaa_password_file: nonempty_env("MATRIX_UIAA_PASSWORD_FILE"),
             debug: env::var("DEBUG")
                 .map(|v| v == "true" || v == "1")
                 .unwrap_or(false),
@@ -136,6 +157,71 @@ impl Config {
             ));
         }
 
+        if self.e2ee_enabled && self.crypto_store_path.is_none() {
+            return Err(AppError::Config(
+                "CRYPTO_STORE_PATH is required when E2EE_ENABLED=true".into(),
+            ));
+        }
+
+        // The store, device id, and sync loop that use this flag are compiled
+        // only with `--features e2ee`. Refuse a config that asks for E2EE
+        // from a binary that cannot open the store.
+        #[cfg(not(feature = "e2ee"))]
+        if self.e2ee_enabled {
+            return Err(AppError::Config(
+                "E2EE_ENABLED=true requires a binary built with --features e2ee".into(),
+            ));
+        }
+
+        if let Some(path) = &self.uiaa_password_file {
+            reject_loose_uiaa_file(path)?;
+        }
+
         Ok(())
     }
+}
+
+fn nonempty_env(name: &str) -> Option<String> {
+    env::var(name).ok().filter(|value| !value.is_empty())
+}
+
+fn recovery_key_file_from_env(crypto_store_path: Option<&str>) -> Option<String> {
+    if let Some(path) = nonempty_env("MATRIX_RECOVERY_KEY_FILE") {
+        return Some(path);
+    }
+    crypto_store_path.map(|dir| {
+        std::path::Path::new(dir)
+            .join("recovery-key")
+            .to_string_lossy()
+            .into_owned()
+    })
+}
+
+/// If the UIAA password file exists, it must be mode 0600. A missing file is
+/// left for bootstrap to report. The file contents are not read.
+fn reject_loose_uiaa_file(path: &str) -> Result<()> {
+    let metadata = match std::fs::metadata(path) {
+        Ok(metadata) => metadata,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(()),
+        Err(error) => {
+            return Err(AppError::Config(format!(
+                "MATRIX_UIAA_PASSWORD_FILE could not be inspected: {error}"
+            )));
+        }
+    };
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let mode = metadata.permissions().mode() & 0o777;
+        if mode != 0o600 {
+            return Err(AppError::Config(format!(
+                "MATRIX_UIAA_PASSWORD_FILE must be mode 0600 (found {mode:o})"
+            )));
+        }
+    }
+    #[cfg(not(unix))]
+    {
+        let _ = metadata;
+    }
+    Ok(())
 }

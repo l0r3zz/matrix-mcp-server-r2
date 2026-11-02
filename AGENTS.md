@@ -80,6 +80,10 @@ When the user requests a durable behavior change, record it here or in the relev
 
 - Whenever the user asks for summarized or analyzed data, audits, or analytical results, always write the report to a Markdown file in `spec/` (for example, `spec/<Topic>-YYYYMMDD.md`) in addition to responding in chat.
 
+## Verification
+
+`.github/workflows/ci.yml` runs on push and pull request. A `rust:1.99-bookworm` job runs `cargo fmt --all --check`, then a matrix of the default build and `--features e2ee`. Each matrix entry runs `cargo clippy --all-targets -- -D warnings` and `cargo test`.
+
 ## Child DOX Index
 
 - `src/AGENTS.md` -- Rust MCP gateway implementation (`src/`), unified 20+2 E2EE-by-default tools, planned `src/bot/` reactive dispatcher, build/test commands, runtime configuration, and coding boundaries.

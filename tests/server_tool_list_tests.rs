@@ -1,5 +1,5 @@
 use matrix_mcp_server_r2::mcp::server::MatrixMcpServer;
-use rmcp::{ServerHandler, model::*};
+use rmcp::ServerHandler;
 
 /// Verify the MCP server reports the expected tool count and names.
 /// This does NOT require a live Matrix homeserver -- it only checks

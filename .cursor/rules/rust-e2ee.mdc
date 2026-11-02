@@ -49,6 +49,8 @@ When the `e2e-encryption` feature is enabled, `matrix-sdk` 0.19 handles encrypti
 5. **Transparent messaging & UTD handling** -- `send-message`, `get-room-messages`, `get-messages-by-date`, and `identify-active-users` work seamlessly on both encrypted and unencrypted rooms, surfacing `UnableToDecrypt` events as `[Encrypted message - unable to decrypt (missing_key)]`
 6. **Encryption status & `/health` exposure** -- `get-encryption-status` MCP tool and `e2ee` / `crossSigned` fields on `GET /health`
 
+Items 1-6 are implemented in `src/matrix/client.rs`, `src/matrix/e2ee.rs`, `src/mcp/server.rs`, and `src/main.rs`. Room creation queries keys before `create_room`. Readers keep `UnableToDecrypt` events. `/health` includes `e2ee` and `crossSigned`.
+
 ## Unified Tool Surface (No `-r2` Duplicate Tools)
 
 Do not create duplicate `-r2` room/message tools or throw `EncryptedRoomError` on existing tools.
@@ -59,7 +61,7 @@ Do not create duplicate `-r2` room/message tools or throw `EncryptedRoomError` o
 
 ## Security Considerations
 
-- Never log encryption keys, session tokens, passwords, or decrypted content at INFO level; use DEBUG or TRACE only behind `RUST_LOG`
+- Never log encryption keys, recovery keys, passwords, session tokens, or decrypted content at any level
 - The SQLite crypto store directory path is configured via `CRYPTO_STORE_PATH`
 - Trust policy inside encrypted rooms is strictly `cross-signed` only. Do not implement `TOFU` or `ignore_unverified_devices`
 - Canonical specs: `.specify/specs/002-e2ee-cross-signing/spec.md` and `.specify/specs/003-integrated-matrix-bot/spec.md`
