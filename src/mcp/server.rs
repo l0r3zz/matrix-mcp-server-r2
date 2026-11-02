@@ -223,26 +223,27 @@ impl MatrixMcpServer {
             .unwrap_or_else(|_| "Unnamed Room".into())
     }
 
-    /// Parse timeline events from room.messages() into (sender, body) pairs.
+    /// Parse timeline events from room.messages() into (sender, body, ts) triples.
+    ///
+    /// Only plaintext `m.room.message` events are returned. Encrypted and
+    /// unable-to-decrypt events stay out of this helper until T010.
     fn parse_message_events(chunk: &[matrix_sdk::deserialized_responses::TimelineEvent]) -> Vec<(String, String, i64)> {
         let mut out = Vec::new();
         for event in chunk {
-            let json_str = serde_json::to_string(&event.kind).unwrap_or_default();
-            if let Ok(val) = serde_json::from_str::<serde_json::Value>(&json_str) {
-                // PlainText variant wraps an event object
-                let ev = if val.get("event").is_some() {
-                    val.get("event").unwrap()
-                } else {
-                    &val
-                };
-                if ev.get("type").and_then(|t| t.as_str()) == Some("m.room.message") {
-                    let sender = ev.get("sender").and_then(|s| s.as_str()).unwrap_or("unknown").to_string();
-                    let body = ev.pointer("/content/body").and_then(|b| b.as_str()).unwrap_or("").to_string();
-                    let ts = ev.get("origin_server_ts").and_then(|t| t.as_i64()).unwrap_or(0);
-                    if !body.is_empty() {
-                        out.push((sender, body, ts));
-                    }
-                }
+            let raw = event.kind.raw();
+            let event_type = raw.get_field::<String>("type").ok().flatten();
+            if event_type.as_deref() != Some("m.room.message") {
+                continue;
+            }
+            let sender = raw.get_field::<String>("sender").ok().flatten().unwrap_or_else(|| "unknown".to_string());
+            let body = raw.get_field::<serde_json::Value>("content").ok().flatten()
+                .and_then(|content| content.get("body").and_then(|b| b.as_str()).map(str::to_owned))
+                .unwrap_or_default();
+            let ts = raw.get_field::<u64>("origin_server_ts").ok().flatten()
+                .and_then(|millis| i64::try_from(millis).ok())
+                .unwrap_or(0);
+            if !body.is_empty() {
+                out.push((sender, body, ts));
             }
         }
         out
@@ -275,7 +276,7 @@ impl MatrixMcpServer {
         let name = self.room_name(&room).await;
         let topic = room.topic().unwrap_or_else(|| "No topic set".into());
         let members = room.joined_members_count();
-        let is_encrypted = room.is_encrypted().await.unwrap_or(false);
+        let is_encrypted = room.latest_encryption_state().await.map(|state| state.is_encrypted()).unwrap_or(false);
         let alias = room.canonical_alias().map(|a| a.to_string()).unwrap_or_else(|| "No alias".into());
         Ok(single_text(format!(
             "Room Information:\nName: {}\nRoom ID: {}\nAlias: {}\nTopic: {}\nMembers: {}\nEncrypted: {}",
@@ -366,8 +367,12 @@ impl MatrixMcpServer {
             Ok(p) => p,
             Err(e) => return Ok(err_text(format!("Error: Failed to get user profile - {}", e))),
         };
-        let display_name = profile.displayname.as_deref().unwrap_or("No display name set");
-        let avatar = profile.avatar_url.as_ref().map(|u: &ruma::OwnedMxcUri| u.to_string()).unwrap_or_else(|| "No avatar set".into());
+        let display_name = profile.get_static::<ruma::api::client::profile::DisplayName>().ok().flatten()
+            .filter(|name| !name.is_empty())
+            .unwrap_or_else(|| "No display name set".to_owned());
+        let avatar = profile.get_static::<ruma::api::client::profile::AvatarUrl>().ok().flatten()
+            .map(|uri| uri.to_string())
+            .unwrap_or_else(|| "No avatar set".into());
 
         let mut shared_rooms = Vec::new();
         for room in self.client.joined_rooms().iter().take(100) {
@@ -516,7 +521,7 @@ impl MatrixMcpServer {
             Err(e) => return Ok(err_text(format!("Error: Failed to send message - {}", e))),
         };
         Ok(single_text(format!("Message sent successfully to {}\nEvent ID: {}\nMessage type: {}{}",
-            self.room_name(&room).await, resp.event_id, msg_type,
+            self.room_name(&room).await, resp.response.event_id, msg_type,
             input.reply_to_event_id.as_ref().map(|id| format!(" (reply to {})", id)).unwrap_or_default())))
     }
 
@@ -541,13 +546,9 @@ impl MatrixMcpServer {
             req.is_direct = true;
             req.invite = vec![target_uid.clone()];
             req.preset = Some(ruma::api::client::room::create_room::v3::RoomPreset::TrustedPrivateChat);
-            let resp = match self.client.create_room(req).await {
-                Ok(r) => r,
+            match self.client.create_room(req).await {
+                Ok(room) => (room, true),
                 Err(e) => return Ok(err_text(format!("Error: Failed to send direct message - {}", e))),
-            };
-            match self.client.get_room(&resp.room_id()) {
-                Some(r) => (r, true),
-                None => return Ok(err_text("Error: Created DM room but could not retrieve it")),
             }
         };
         let resp = match room.send(RoomMessageEventContent::text_plain(&input.message)).await {
@@ -555,7 +556,7 @@ impl MatrixMcpServer {
             Err(e) => return Ok(err_text(format!("Error: Failed to send direct message - {}", e))),
         };
         Ok(single_text(format!("Direct message sent successfully to {}\nRoom: {} ({})\nEvent ID: {}\n{}",
-            input.target_user_id, self.room_name(&room).await, room.room_id(), resp.event_id,
+            input.target_user_id, self.room_name(&room).await, room.room_id(), resp.response.event_id,
             if created { "New DM room created" } else { "Used existing DM room" })))
     }
 
@@ -575,8 +576,8 @@ impl MatrixMcpServer {
             }
             req.invite = uids;
         }
-        let resp = match self.client.create_room(req).await {
-            Ok(r) => r,
+        let room = match self.client.create_room(req).await {
+            Ok(room) => room,
             Err(e) => { let m = e.to_string(); return Ok(err_text(
                 if m.contains("M_ROOM_IN_USE") { format!("Error: Room alias \"{}\" is already in use", input.room_alias.as_deref().unwrap_or("unknown")) }
                 else if m.contains("M_FORBIDDEN") { "Error: You don't have permission to create rooms".into() }
@@ -585,7 +586,7 @@ impl MatrixMcpServer {
         };
         let domain = self.config.matrix_user_id.split(':').nth(1).unwrap_or("unknown");
         Ok(single_text(format!("Successfully created room: {}\nRoom ID: {}\nAlias: {}\nPrivacy: {}\nTopic: {}\nInvited users: {}",
-            input.room_name, resp.room_id(),
+            input.room_name, room.room_id(),
             input.room_alias.as_ref().map(|a| format!("#{}:{}", a, domain)).unwrap_or_else(|| "No alias".into()),
             if is_private { "Private" } else { "Public" },
             input.topic.as_deref().unwrap_or("No topic set"),

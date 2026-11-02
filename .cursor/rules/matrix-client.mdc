@@ -38,4 +38,4 @@ When `SKIP_MATRIX_INIT=true`:
 
 - Config includes OAuth/token exchange env vars but auth is minimal (planned, not implemented)
 - `rejectUnauthorized: false` equivalent for local dev TLS -- not production-safe
-- matrix-sdk 0.10 with rustls -- no OpenSSL dependency
+- matrix-sdk 0.19 with rustls (`rustls-aws-lc-rs`) -- no OpenSSL dependency. Device id comes from `/_matrix/client/v3/account/whoami`, not a hardcoded literal. E2EE behavior stays off until later tasks

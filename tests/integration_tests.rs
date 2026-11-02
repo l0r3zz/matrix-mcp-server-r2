@@ -7,9 +7,10 @@
 use matrix_mcp_server_r2::config::Config;
 use matrix_mcp_server_r2::mcp::server::*;
 use matrix_sdk::{
-    authentication::matrix::{MatrixSession, MatrixSessionTokens},
+    authentication::matrix::MatrixSession,
     config::SyncSettings,
-    Client, SessionMeta,
+    store::RoomLoadSettings,
+    Client, SessionMeta, SessionTokens,
 };
 use rmcp::handler::server::wrapper::Parameters;
 use ruma::{OwnedDeviceId, OwnedUserId};
@@ -229,14 +230,14 @@ async fn create_test_client(mock_server: &MockServer) -> Client {
             user_id: OwnedUserId::try_from(TEST_USER).unwrap(),
             device_id: OwnedDeviceId::from("TEST_DEVICE"),
         },
-        tokens: MatrixSessionTokens {
+        tokens: SessionTokens {
             access_token: TEST_TOKEN.to_string(),
             refresh_token: None,
         },
     };
     client
         .matrix_auth()
-        .restore_session(session)
+        .restore_session(session, RoomLoadSettings::default())
         .await
         .expect("Failed to restore test session");
 

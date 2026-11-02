@@ -8,7 +8,7 @@ T001 is the first code change.
 ## Phase 1: SDK 0.19 Migration
 
 - [X] T001 In `Cargo.toml` (and `Dockerfile`), set `rust-version` to `1.99` (builder image `rust:1.99-bookworm`) and `matrix-sdk` to `0.19` with `default-features = false` and features `rustls-tls` plus the `e2ee` feature mapping to `e2e-encryption` and `bundled-sqlite`. Let `ruma` follow `matrix-sdk` 0.19. Leave `rmcp` at `1.2`.
-- [ ] T002 Update `src/matrix/client.rs` and `src/mcp/server.rs` call sites so `cargo build` and `cargo test` pass on the `matrix-sdk` 0.19 API without enabling E2EE behavior yet. Replace the hardcoded `"MCP_SERVER"` device id literal by resolving the session's `device_id` via `/_matrix/client/v3/account/whoami` (or configuration/store).
+- [X] T002 Update `src/matrix/client.rs` and `src/mcp/server.rs` call sites so `cargo build` and `cargo test` pass on the `matrix-sdk` 0.19 API without enabling E2EE behavior yet. Replace the hardcoded `"MCP_SERVER"` device id literal by resolving the session's `device_id` via `/_matrix/client/v3/account/whoami` (or configuration/store).
 
 ## Phase 2: Persistent SQLite Crypto Store & Device Identity
 
