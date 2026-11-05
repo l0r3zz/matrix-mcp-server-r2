@@ -87,6 +87,7 @@ When the user requests a durable behavior change, record it here or in the relev
 ## Child DOX Index
 
 - `src/AGENTS.md` -- Rust MCP gateway implementation (`src/`), unified 20+2 E2EE-by-default tools, planned `src/bot/` reactive dispatcher, build/test commands, runtime configuration, and coding boundaries.
+- `docs/` -- Operator docs. `docs/upgrade-to-v0.2.0.md` upgrades Agent-Matrix v0.91 deployments to v0.2.0 with E2EE (requires Agent-Matrix v0.92).
 - `spec/` -- Unified API contract (`spec/matrix-mcp-v1-v2.yml`), E2EE architecture/key-management docs, and saved analysis/audit reports.
 - `.specify/` -- Spec Kit governance (`.specify/memory/constitution.md` v2.0.3), active feature pointer (`.specify/feature.json`), feature specifications (`.specify/specs/002-e2ee-cross-signing/`, `.specify/specs/003-integrated-matrix-bot/`), templates, and helper scripts.
 - `reference/` -- Frozen TypeScript implementation snapshot (`reference/ts-source/`) and historical design docs (`reference/docs/`). Do not modify.
