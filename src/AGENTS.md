@@ -33,7 +33,7 @@ cargo clippy --all-targets -- -D warnings
 cargo clippy --all-targets --features e2ee -- -D warnings
 cargo fmt --all --check
 
-# Docker
+# Docker (release images build with e2ee; --build-arg CARGO_FEATURES= to drop it)
 docker build -t matrix-mcp-server-r2 .
 docker run --env-file .env -p 3000:3000 matrix-mcp-server-r2
 

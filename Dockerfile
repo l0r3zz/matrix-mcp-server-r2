@@ -22,6 +22,10 @@ FROM rust:1.99-bookworm AS builder
 
 WORKDIR /build
 
+# Release images ship E2EE support. The store still opens only when the
+# runtime sets E2EE_ENABLED=true. Build without it: --build-arg CARGO_FEATURES=
+ARG CARGO_FEATURES=e2ee
+
 # Makes the Rust/Cargo version visible in CI logs (must not be 1.82.x for edition2024 crates).
 RUN rustc --version && cargo --version
 
@@ -38,14 +42,14 @@ RUN mkdir -p src && echo 'fn main() { println!("placeholder"); }' > src/main.rs 
     mkdir -p src/matrix src/mcp && \
     touch src/config.rs src/error.rs src/auth.rs src/matrix/mod.rs src/matrix/client.rs \
           src/matrix/cache.rs src/mcp/mod.rs src/mcp/server.rs && \
-    cargo build --release 2>/dev/null || true
+    cargo build --release --features "${CARGO_FEATURES}" 2>/dev/null || true
 
 # Now copy real source and rebuild
 COPY src/ src/
 # IMPORTANT: Touch all .rs files so cargo detects them as newer than the
 # cached placeholder build. Without this, cargo's fingerprinting sees the
 # existing binary as up-to-date and skips recompilation.
-RUN find src -name '*.rs' -exec touch {} + && cargo build --release
+RUN find src -name '*.rs' -exec touch {} + && cargo build --release --features "${CARGO_FEATURES}"
 
 # ---- Stage 2: Runtime ----
 FROM debian:bookworm-slim
