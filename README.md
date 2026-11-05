@@ -3,15 +3,19 @@
 > Rust implementation of the Matrix MCP Server -- a drop-in replacement for
 > [matrix-mcp-server](https://github.com/mjknowles/matrix-mcp-server) (TypeScript)
 
-## Status: Phase 2 -- v1 Implementation (API parity)
+## Status: Phase 3 -- Cross-signed E2EE (v0.2.0)
 
 | Phase | Description | Status |
 |-------|-------------|--------|
 | 0 | Project scaffolding | Done |
 | 1 | Spec writing | Done |
 | 2 | v1 Implementation -- API parity | Done |
-| 3 | v2 Implementation -- E2EE | Started |
-| 4 | Integration testing & deployment | Not started |
+| 3 | v2 Implementation -- E2EE | Done (v0.2.0; gates T014 and T016 passed on agent0-5) |
+| 4 | Integration testing & deployment | Fleet rollout in progress |
+
+## Upgrading from v0.1.x
+
+Existing Agent-Matrix v0.91 deployments: follow [`docs/upgrade-to-v0.2.0.md`](docs/upgrade-to-v0.2.0.md). It requires Agent-Matrix v0.92, which gives matrix-bot its own Matrix device.
 
 ## What This Is
 
@@ -58,7 +62,7 @@ exposes Matrix operations as MCP tools over the Streamable HTTP transport.
 | Language | Rust 2021 edition |
 | MCP SDK | rmcp 1.2 (official Rust MCP SDK) |
 | HTTP | axum + tower-http |
-| Matrix SDK | matrix-sdk 0.10 |
+| Matrix SDK | matrix-sdk 0.19 (`e2ee` feature off unless requested) |
 | Serialization | serde + schemars |
 | Error Handling | thiserror |
 | Logging | tracing |
@@ -94,7 +98,7 @@ Official images are built by GitHub Actions and pushed to **GitHub Container Reg
 docker pull ghcr.io/<github-owner>/matrix-mcp-server-r2:0.1.0
 ```
 
-The `:latest` tag is updated on each tag push that matches `v*`. Image tags like `0.1.0` match the server version reported by `GET /health` and `matrix-mcp-server-r2 --version`.
+Release images and the release binary are built with `--features e2ee`. E2EE stays off at runtime until `E2EE_ENABLED=true`. The `:latest` tag is updated on each tag push that matches `v*`. Image tags like `0.1.0` match the server version reported by `GET /health` and `matrix-mcp-server-r2 --version`.
 
 **Manual workflow run:** You can use **Actions → Publish Docker image → Run workflow** and select a **tag** as the ref (not only `main`) if you need to rebuild an existing release.
 

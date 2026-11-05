@@ -5,6 +5,9 @@
 # Rust build artifacts
 target/
 *.rs.bk
+*.rlib
+*.prof*
+*.tmp
 
 # Node.js (reference TS source)
 node_modules/
@@ -44,3 +47,6 @@ Thumbs.db
 __pycache__/
 venv/
 *.pyc
+
+# Local spec baseline (not a contract; kept out of git)
+.specify/specs/002-e2ee-cross-signing/spec.md.baseline

@@ -1,12 +1,13 @@
 [package]
 name = "matrix-mcp-server-r2"
-version = "0.1.1"
+version = "0.2.0"
 edition = "2021"
 authors = ["l0r3zz"]
 description = "Rust implementation of Matrix MCP Server - drop-in replacement for TypeScript version"
 license = "MIT"
 repository = "https://github.com/l0r3zz/matrix-mcp-server-r2"
-rust-version = "1.88"
+# MSRV matches the 002 E2EE target. matrix-sdk 0.19 itself requires >= 1.96.
+rust-version = "1.99"
 
 [dependencies]
 # Async runtime
@@ -20,9 +21,17 @@ tower-http = { version = "0.6", features = ["cors", "trace"] }
 # MCP SDK
 rmcp = { version = "1.2", default-features = false, features = ["server", "macros", "transport-streamable-http-server"] }
 
-# Matrix SDK
-matrix-sdk = { version = "0.10", default-features = false, features = ["rustls-tls"] }
-ruma = { version = "0.12", features = ["client-api-c", "compat"] }
+# matrix-sdk 0.19 (crate MSRV 1.96). default-features = false keeps
+# e2e-encryption off until the `e2ee` feature is requested.
+# 0.19 renamed the 0.10 `rustls-tls` feature to `rustls-aws-lc-rs`
+# (reqwest rustls + aws-lc-rs). CVE-2026-45056 is fixed in
+# matrix-sdk-crypto 0.16.1, which 0.19 includes. rmcp stays at 1.2.
+# ruma follows matrix-sdk 0.19 (0.17). There is no umbrella `compat` feature.
+matrix-sdk = { version = "0.19", default-features = false, features = ["rustls-aws-lc-rs"] }
+# Direct dependency so the e2ee feature can name CollectStrategy and
+# TrustRequirement. Cargo already builds this crate for matrix-sdk.
+matrix-sdk-base = { version = "0.19", optional = true, default-features = false }
+ruma = { version = "0.17", features = ["client-api-c"] }
 
 # Serialization & Schema
 serde = { version = "1.0", features = ["derive"] }
@@ -57,7 +66,11 @@ regex = "1"
 
 [features]
 default = []
-e2ee = ["matrix-sdk/e2e-encryption"]
+e2ee = [
+    "matrix-sdk/e2e-encryption",
+    "matrix-sdk/bundled-sqlite",
+    "matrix-sdk-base/e2e-encryption",
+]
 
 [profile.release]
 opt-level = 3

@@ -2,12 +2,14 @@
 ///
 /// Mirrors the TS `getMatrixContext()` and `getAccessToken()` helpers.
 /// Falls back to server-wide config when headers are absent.
+#[allow(dead_code)]
 pub struct MatrixAuthContext {
     pub user_id: String,
     pub homeserver_url: String,
     pub access_token: String,
 }
 
+#[allow(dead_code)]
 impl MatrixAuthContext {
     /// Build auth context from explicit values (server-wide config).
     pub fn from_config(user_id: &str, homeserver_url: &str, access_token: &str) -> Self {

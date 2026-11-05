@@ -2,7 +2,9 @@
 
 **Feature Branch**: `001-e2ee-support`
 **Created**: 2026-05-11
-**Status**: Draft
+**Status**: Superseded by `.specify/specs/002-e2ee-cross-signing/spec.md` (2026-10-23)
+
+This May spec assumed `matrix-sdk` 0.10, Dendrite, and optional cross-signing. Do not implement from it. The October spec is the source of truth.
 **Input**: Phase 3 of matrix-mcp-server-r2 roadmap -- add E2EE to the existing Rust MCP server so AI agents can operate in encrypted Matrix rooms.
 
 ## Context

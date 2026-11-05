@@ -1,0 +1,12 @@
+---
+description: Save summarized or analyzed data, audits, and research results as Markdown files in spec/
+alwaysApply: true
+---
+
+# Save Summarized and Analyzed Results to `spec/`
+
+Whenever the user asks for summarized or analyzed data, audits, landscape reviews, or analytical results in `matrix-mcp-server-r2-repo`:
+
+1. **Always write the full report to a Markdown file in `spec/`** (e.g., `spec/<Topic-Name>-YYYYMMDD.md`).
+2. **Use clear, dated filenames** matching the existing convention in `spec/` (such as `spec/E2EE-Landscape-Review-20261023.md` or `spec/Repository-Audit-20261029.md`).
+3. **Include the file path in your chat response** so the user can open or reference the saved artifact directly.

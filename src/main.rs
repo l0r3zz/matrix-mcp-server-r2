@@ -4,6 +4,7 @@ use tracing::info;
 mod auth;
 mod config;
 mod error;
+mod health;
 mod matrix;
 mod mcp;
 
@@ -12,6 +13,27 @@ use error::AppError;
 use mcp::server::MatrixMcpServer;
 
 const VERSION: &str = env!("CARGO_PKG_VERSION");
+
+/// `true` when the local device is cross-signed by its owner.
+///
+/// A store lookup failure leaves the flag false. `/health` still returns 200.
+async fn health_cross_signed(client: &matrix_sdk::Client) -> bool {
+    #[cfg(feature = "e2ee")]
+    {
+        return client
+            .encryption()
+            .get_own_device()
+            .await
+            .ok()
+            .flatten()
+            .is_some_and(|device| device.is_cross_signed_by_owner());
+    }
+    #[cfg(not(feature = "e2ee"))]
+    {
+        let _ = client;
+        false
+    }
+}
 
 #[tokio::main]
 async fn main() -> Result<(), AppError> {
@@ -33,7 +55,7 @@ async fn main() -> Result<(), AppError> {
     config.validate()?;
     info!("Configuration loaded successfully");
 
-    let (client, sync_handle, cleanup_handle) = if config.skip_matrix_init {
+    let (client, sync_handle, cleanup_handle, _store_lock) = if config.skip_matrix_init {
         info!("SKIP_MATRIX_INIT is set -- starting without Matrix connection");
         info!("Tools will return errors; use this mode for MCP protocol testing only");
         let client = matrix_sdk::Client::builder()
@@ -43,14 +65,36 @@ async fn main() -> Result<(), AppError> {
             .map_err(|e| AppError::MatrixClient(format!("Failed to build stub client: {}", e)))?;
         let sync_handle = tokio::spawn(async {});
         let cleanup_handle = tokio::spawn(async {});
-        (client, sync_handle, cleanup_handle)
+        (client, sync_handle, cleanup_handle, None)
     } else {
-        let client = matrix::create_matrix_client(
+        let (store_path, recovery_key_file, uiaa_password_file) = if config.e2ee_enabled {
+            (
+                config
+                    .crypto_store_path
+                    .as_deref()
+                    .map(std::path::Path::new),
+                config
+                    .recovery_key_file
+                    .as_deref()
+                    .map(std::path::Path::new),
+                config
+                    .uiaa_password_file
+                    .as_deref()
+                    .map(std::path::Path::new),
+            )
+        } else {
+            (None, None, None)
+        };
+        let initialized = matrix::create_matrix_client(
             &config.matrix_homeserver_url,
             &config.matrix_user_id,
             &config.matrix_access_token,
+            store_path,
+            recovery_key_file,
+            uiaa_password_file,
         )
         .await?;
+        let client = initialized.client;
         let sync_handle = matrix::client::start_background_sync(client.clone());
         let cache = matrix::ClientCache::new();
         let cleanup_handle = cache.start_cleanup_task();
@@ -61,7 +105,7 @@ async fn main() -> Result<(), AppError> {
                 client.clone(),
             )
             .await;
-        (client, sync_handle, cleanup_handle)
+        (client, sync_handle, cleanup_handle, initialized.store_lock)
     };
 
     let port = config.port;
@@ -69,27 +113,45 @@ async fn main() -> Result<(), AppError> {
 
     // Build rmcp StreamableHTTP MCP service
     use rmcp::transport::streamable_http_server::session::local::LocalSessionManager;
-    use rmcp::transport::streamable_http_server::tower::{StreamableHttpServerConfig, StreamableHttpService};
+    use rmcp::transport::streamable_http_server::tower::{
+        StreamableHttpServerConfig, StreamableHttpService,
+    };
 
     let server_client = client.clone();
     let server_config = config.clone();
     let mcp_service: StreamableHttpService<MatrixMcpServer> = StreamableHttpService::new(
-        move || Ok(MatrixMcpServer::new(server_client.clone(), server_config.clone())),
+        move || {
+            Ok(MatrixMcpServer::new(
+                server_client.clone(),
+                server_config.clone(),
+            ))
+        },
         LocalSessionManager::default().into(),
         StreamableHttpServerConfig::default(),
     );
 
     let health_config = config.clone();
+    let health_client = client.clone();
     let app = axum::Router::new()
         .route(
             "/health",
-            axum::routing::get(move || async move {
-                axum::Json(serde_json::json!({
-                    "status": "healthy",
-                    "server": "matrix-mcp-server-r2",
-                    "version": VERSION,
-                    "user_id": health_config.matrix_user_id,
-                }))
+            axum::routing::get(move || {
+                let health_config = health_config.clone();
+                let health_client = health_client.clone();
+                async move {
+                    let (e2ee, _) = health::health_flags(
+                        health_config.e2ee_enabled,
+                        health_config.skip_matrix_init,
+                        false,
+                    );
+                    let cross_signed = e2ee && health_cross_signed(&health_client).await;
+                    axum::Json(health::health_response(
+                        &health_config.matrix_user_id,
+                        VERSION,
+                        e2ee,
+                        cross_signed,
+                    ))
+                }
             }),
         )
         .nest_service("/mcp", mcp_service);

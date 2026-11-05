@@ -1,6 +1,7 @@
 pub mod auth;
 pub mod config;
 pub mod error;
+pub mod health;
 pub mod matrix;
 pub mod mcp;
 

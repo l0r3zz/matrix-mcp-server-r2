@@ -1,0 +1,43 @@
+# Push and pull request gate. The image matches the Dockerfile builder pin.
+name: CI
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  fmt:
+    name: rustfmt (rust 1.99)
+    runs-on: ubuntu-latest
+    container: rust:1.99-bookworm
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install rustfmt
+        run: rustup component add rustfmt
+      - name: Check formatting
+        run: cargo fmt --all --check
+
+  test:
+    name: ${{ matrix.name }} (rust 1.99)
+    needs: fmt
+    runs-on: ubuntu-latest
+    container: rust:1.99-bookworm
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: default
+            flags: ""
+          - name: e2ee
+            flags: "--features e2ee"
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install clippy
+        run: rustup component add clippy
+      - name: Clippy
+        run: cargo clippy --all-targets ${{ matrix.flags }} -- -D warnings
+      - name: Test
+        run: cargo test ${{ matrix.flags }}

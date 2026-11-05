@@ -9,19 +9,22 @@ Its goal is to explain, in plain language, how keys should be managed for v2 E2E
 
 ---
 
-## 0. Locked Decisions (Current)
+## 0. Locked Decisions (Updated 2026-10-29)
 
-These decisions are now explicit in the spec:
+These decisions replace the earlier TOFU default and the Two-Tier (`-r2` tool split) draft. The active specification is `.specify/specs/002-e2ee-cross-signing/spec.md` (followed by Stage 2 `.specify/specs/003-integrated-matrix-bot/spec.md`).
 
-- **Default trust policy for v2:** `tofu`
-- **Secondary trust policy:** `strict` (optional, later hardening path)
-- **Backup secret input:** support both:
-  - secret manager reference (`backupPassphraseRef`)
-  - environment variable name (`backupPassphraseEnvVar`)
-- **Backup secret precedence:**
-  1. `backupPassphraseRef`
-  2. `backupPassphraseEnvVar`
-  3. server default fallback configuration
+- **Unified Tool Surface (No `-r2` Split):** The 20 existing MCP tools (`create-room`, `send-direct-message`, `send-message`, `get-room-messages`, `get-messages-by-date`, `identify-active-users`, etc.) transparently support both E2EE and unencrypted rooms. Two management tools are added: `bootstrap-e2ee` and `get-encryption-status`.
+- **Auto-Bootstrap at Startup:** When `E2EE_ENABLED=true`, device key initialization and cross-signing bootstrap run automatically at server startup so external clients do not need to call `bootstrap-e2ee` manually before using encrypted rooms.
+- **E2EE-by-Default Room Creation with Pre-Flight Fallback:** `create-room` and `send-direct-message` default to `encryptionMode: "auto"` when E2EE is enabled, querying `/_matrix/client/v3/keys/query` for invitees to create an encrypted (`m.room.encryption`) room when all invitees have cross-signed E2EE keys, or automatically falling back to an unencrypted room when an invitee lacks E2EE keys (network/federation errors fail closed).
+- **Trust policy:** `cross-signed` only inside encrypted rooms. There is no `tofu` mode and no `strict` opt-in.
+- **Room keys:** do not send room keys or other encrypted to-device secrets to a device that is not cross-signed. Withhold with `m.room_key.withheld` / `m.unverified` via `matrix-sdk` 0.19 recipient settings.
+- **Recovery secret input:** secret manager reference, environment variable name, or file path. Never a raw secret in an MCP argument, log line, or tool result.
+- **Recovery secret precedence:**
+  1. `backupPassphraseRef` (secret manager)
+  2. `backupPassphraseEnvVar` (name only)
+  3. `MATRIX_RECOVERY_KEY_FILE` (path on the store volume)
+- **SDK:** `matrix-sdk` 0.19.x, Rust >= 1.99 (constitution v2.0.1). `matrix-sdk-crypto` >= 0.16.1 (CVE-2026-45056).
+- **Device id:** one id per agent, stored in `$CRYPTO_STORE_PATH/.device-id` and aligned with `/_matrix/client/v3/account/whoami`. The literal `MCP_SERVER` is not allowed.
 
 Raw secret values must never be passed in MCP tool arguments.
 
@@ -29,10 +32,12 @@ Raw secret values must never be passed in MCP tool arguments.
 
 ## 0.1 Reference Pseudocode (Bootstrap Resolution)
 
-Use this as the source-of-truth behavior for `bootstrap-e2ee-r2`:
+Use this as the source-of-truth behavior for `bootstrap-e2ee` (the same resolution runs during startup auto-bootstrap when `E2EE_ENABLED=true`):
 
 ```python
-trust_policy = request.get("trustPolicy", "tofu")
+trust_policy = request.get("trustPolicy", "cross-signed")
+if trust_policy != "cross-signed":
+    raise TrustPolicyNotSatisfiedError("only cross-signed is supported")
 
 if request.get("backupPassphraseRef"):
     passphrase = secrets.get(request["backupPassphraseRef"])
@@ -40,12 +45,15 @@ if request.get("backupPassphraseRef"):
 elif request.get("backupPassphraseEnvVar"):
     passphrase = env.get(request["backupPassphraseEnvVar"])
     source = "env_var"
+elif env.get("MATRIX_RECOVERY_KEY_FILE"):
+    passphrase = read_file(env["MATRIX_RECOVERY_KEY_FILE"])
+    source = "recovery_key_file"
 else:
-    passphrase = config.default_backup_passphrase
-    source = "server_default" if passphrase else "none"
+    passphrase = None
+    source = "none"
 
-if trust_policy == "strict" and not verification_prereqs_ready():
-    raise TrustPolicyNotSatisfiedError("strict policy prerequisites not met")
+if source != "none" and not passphrase:
+    raise SecretResolutionError("recovery secret could not be resolved")
 ```
 
 Implementation notes:
@@ -75,11 +83,13 @@ If any one of these is lost, decryption behavior changes:
 
 At implementation level (managed by Matrix SDK crypto), you will encounter:
 
-- **Device identity keys** (long-lived per device)
+- **Device identity keys** (Ed25519 and Curve25519, long-lived per device)
+- **Cross-signing keys** (master, self-signing, user-signing), held in Secret Storage
 - **One-time keys** (consumed for session setup)
 - **Megolm room/session keys** (group message encryption/decryption)
+- **Key backup decryption key**, unlocked by the recovery key so history from before this device existed can be restored
 
-The MCP server should not invent custom crypto primitives. It should rely on Matrix SDK behavior and expose state clearly through `-r2` tools.
+The MCP server should not invent custom crypto primitives. It should rely on Matrix SDK behavior and expose state clearly through `bootstrap-e2ee` and `get-encryption-status`.
 
 ---
 
@@ -97,10 +107,12 @@ The MCP server should not invent custom crypto primitives. It should rely on Mat
 - Store is isolated per agent instance.
 - File permissions must allow only the MCP service user.
 
-### 3.3 Trust Mode for First Release
+### 3.3 Trust Mode
 
-- Default: TOFU style trust for operational simplicity.
-- Strict verification can be added later (do not block v2 rollout on full UX).
+- The only mode is cross-signing. A device that is not cross-signed does not receive room keys.
+- TOFU, "trust all", and `ignore_unverified_devices` are out of scope. Those are what `elkimek/matrix-bridge` and `elkimek/matrix-e2ee-bridge` do, and they do not meet this fleet's secure-network requirement.
+- Headless setup follows `jlxq0/matrix-mcp` and `Just-Insane/matrix-mcp-server`: restore Secret Storage with a recovery key, or create cross-signing once when the account has none. Do not reset an existing cross-signing identity.
+- Interactive emoji comparison (`qechris/matrix-mcp`) is a useful pattern for a human operator and is not required for agent bootstrap.
 
 ---
 
@@ -108,11 +120,13 @@ The MCP server should not invent custom crypto primitives. It should rely on Mat
 
 ### 4.1 First Bootstrap
 
-1. MCP starts.
-2. Check for existing crypto store.
-3. If missing, initialize store and device keys.
-4. Upload device keys and one-time keys.
-5. Return status via `bootstrap-e2ee-r2`.
+1. MCP starts and opens the persistent store.
+2. Load or create `.device-id` in that directory. Never use the shared literal `MCP_SERVER`.
+3. Upload device keys only after the device id and store agree.
+4. If a recovery secret resolves, import cross-signing from Secret Storage and restore key backup.
+5. If the account has no cross-signing identity, create one and write the new recovery key to a mode-0600 file on the store volume. Do not put that key in the tool response.
+6. If an identity already exists and no recovery secret resolves, fail. Do not invent a second identity.
+7. Return status via `bootstrap-e2ee` / `get-encryption-status` (`crossSigned`, `deviceId`, `backupConfigured`, `resolvedBackupSource`, `keyBackupRestore`). Do not return the secret. Historical key-backup restore runs in the background so startup finishes within 60 seconds.
 
 Expected output includes:
 
@@ -125,8 +139,9 @@ Expected output includes:
 
 - Sync loop processes to-device events and key updates.
 - One-time keys are replenished when low.
-- `send-message-r2` encrypts when `encryption_mode=e2ee`.
-- `get-room-messages-r2` decrypts when keys are available.
+- `send-message` encrypts automatically in any room whose state has `m.room.encryption`, and sends plaintext in unencrypted rooms. Room keys go only to cross-signed devices.
+- `get-room-messages`, `get-messages-by-date`, and `identify-active-users` decrypt when keys are available and mark undecryptable events explicitly.
+- `create-room` and `send-direct-message` default to `encryptionMode: "auto"`: pre-flight `/keys/query`, encrypt when all invitees are cross-signed, otherwise fall back to an unencrypted room and say so. Network errors fail closed.
 
 ### 4.3 Restart
 
@@ -136,7 +151,7 @@ Expected output includes:
 
 - Copy crypto store with integrity checks.
 - Restore before starting MCP on destination.
-- Validate with `get-encryption-status-r2` and encrypted-room message read tests.
+- Validate with `get-encryption-status` and encrypted-room message read tests.
 
 ---
 
@@ -150,7 +165,7 @@ Use explicit, structured error types for key-management states:
 
 These should include human-action guidance, such as:
 
-- "Run bootstrap-e2ee-r2"
+- "Run bootstrap-e2ee (or restart with E2EE_ENABLED=true)"
 - "Restore crypto store backup"
 - "Retry after sync/key share"
 
@@ -173,19 +188,21 @@ Important tradeoff:
 
 ## 7. Suggested Tool Contract Additions
 
-### 7.1 `bootstrap-e2ee-r2`
+### 7.1 `bootstrap-e2ee`
 
 Should report:
 
 - `deviceId`
 - `identityKey`
+- `crossSigned`
 - `cryptoStoreState`
 - `uploadedOneTimeKeys`
 - `backupConfigured`
 - `resolvedBackupSource`
-- `trustPolicy`
+- `keyBackupRestore` (`not_started | running | done | failed`)
+- `trustPolicy` (`cross-signed` only; do not return the recovery key)
 
-### 7.2 `get-encryption-status-r2`
+### 7.2 `get-encryption-status`
 
 Should report:
 
@@ -196,9 +213,12 @@ Should report:
 - `canDecryptNow`
 - `trustPolicy`
 - `backupSourceConfigured`
+- `keyBackupRestore`
 - `notes`
 
-### 7.3 `get-room-messages-r2`
+The authoritative field list is `spec/matrix-mcp-v1-v2.yml`; this section is the operator-facing summary.
+
+### 7.3 `get-room-messages` (and other read tools)
 
 For each message include:
 
@@ -212,7 +232,7 @@ For each message include:
 - Restart gate: encrypted history still decrypts after restart.
 - Migration gate: encrypted history still decrypts after host migration with restored store.
 - Loss gate: intentional store removal yields explicit recovery errors (not silent corruption).
-- Compatibility gate: v1 behavior unchanged (`EncryptedRoomError` for encrypted rooms).
+- Compatibility gate: unencrypted rooms (for example `Fleet HQ Clean`) work unchanged through the same 20 tools, and `create-room` auto-fallback reports `Encrypted: No (fallback: ...)` instead of refusing.
 
 ---
 
