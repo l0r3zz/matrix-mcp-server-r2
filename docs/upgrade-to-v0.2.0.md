@@ -19,6 +19,7 @@ Validated on g2s with Continuwuity v26.9.1:
 
 - agent0-5: `spec/T014-Agent0-5-Result-20261104.md` and `spec/T016-Agent0-5-Fleet-Drop-In-Result-20261105.md`.
 - agent0-4: a full run of this guide from a v0.91 state. See `spec/Upgrade-Agent0-4-v0.2.0-rc.1-Result-20261105.md`.
+- agent0-5: a run of this guide on an agent that already had E2EE from a test build. See `spec/Upgrade-Agent0-5-v0.2.0-rc.1-Result-20261105.md`.
 
 ## Read this first
 
@@ -203,6 +204,8 @@ On first start r2 does these things:
 4. Writes `crypto-store/recovery-key` with mode 0600.
 
 On the first start, `docker logs agent0-N` shows several `ERROR` lines with HTTP 404 status. They are for `m.secret_storage.default_key`, `m.cross_signing.*`, `m.megolm_backup.v1`, and `room_keys/version`. They are expected, because r2 checks for these items before it creates them. Success ends with `Recovery state changed from Disabled to Enabled`.
+
+If `crypto-store/` already exists, for example on an agent that ran an E2EE test build, r2 reuses the device, the identity, and `recovery-key`. It logs none of these errors, and users do not need to verify the agent again. On agent0-5, `/health` answered about 30 seconds after the restart.
 
 ### 9. Verify
 
