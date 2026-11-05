@@ -369,10 +369,12 @@ async fn resolve_device_id(
 /// SQLite store opened for this client.
 pub fn start_background_sync(client: Client) -> tokio::task::JoinHandle<()> {
     tokio::spawn(async move {
-        let settings = SyncSettings::default().timeout(Duration::from_secs(30));
+        let mut settings = SyncSettings::default().timeout(Duration::from_secs(30));
         loop {
             match client.sync_once(settings.clone()).await {
-                Ok(_) => {}
+                Ok(response) => {
+                    settings = settings.token(response.next_batch);
+                }
                 Err(e) => {
                     tracing::warn!("Background sync error: {}", e);
                     tokio::time::sleep(Duration::from_secs(5)).await;
