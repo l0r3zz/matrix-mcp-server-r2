@@ -29,13 +29,13 @@ sync-fleet.sh was retired on 2026-10-17: it was moved to `scripts/legacy/` with 
 
 ## State before the fix
 
-| Agent | watchdog | `/root/.ssh/id_*` |
-|-------|----------|-------------------|
-| agent0-1 | not running | 2 |
-| agent0-2 | not running | 2 |
-| agent0-3 | not running | 0 |
-| agent0-4 | running (started by hand during the v0.2.0 upgrade) | 0 |
-| agent0-5 | running (the stub launches it) | 0 |
+| Agent | watchdog |
+|-------|----------|
+| agent0-1 | not running |
+| agent0-2 | not running |
+| agent0-3 | not running |
+| agent0-4 | running (started by hand during the v0.2.0 upgrade) |
+| agent0-5 | running (the stub launches it) |
 
 The stub launches the watchdog but skips these v3.20 phases:
 
@@ -57,5 +57,6 @@ Phase 6 serves only `galadriel-workspace/wiki-site`, which exists only on agent0
 
 ## Open items
 
-- SSH keys are absent on agent0-3, agent0-4, and agent0-5. Phase 0.1 will try to restore them on the next container restart.
+- g2s SSH access is granted per agent. Only Gandalf (agent0-1) and Galadriel (agent0-2) have infrastructure access: each has an ed25519 key in `/root/.ssh`, a backup in the ssh2g2s skill, and an entry in g2s `authorized_keys`. agent0-3, agent0-4, and agent0-5 have no key by design. Phase 0.1 logs "skipping" on those agents.
+- Galadriel's wiki on agent0-2 port 8080 serves OpenBrain to human readers. It was not touched; preserve its state. Phase 6 starts it only if no server is running.
 - Fleet-wide template pushes should go through `am-ctl reconcile apply` / `am-ctl deploy` or `deploy-mms-r2-to-agent.sh`, never through scripts in agent project trees.
