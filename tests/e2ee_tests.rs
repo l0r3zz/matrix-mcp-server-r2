@@ -848,6 +848,11 @@ async fn bootstrap_reports_running_then_finishes_and_a_fresh_store_can_see_the_i
         room.body.contains("m.room.history_visibility"),
         "history visibility missing"
     );
+    assert!(
+        room.body.contains("\"history_visibility\":\"invited\""),
+        "history visibility must be invited: {}",
+        room.body
+    );
 
     let _ = std::fs::remove_dir_all(&store);
     let _ = std::fs::remove_dir_all(&fresh);

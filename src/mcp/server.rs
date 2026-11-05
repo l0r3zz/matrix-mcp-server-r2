@@ -520,8 +520,12 @@ fn encryption_label(encrypted: bool, fallback: Option<&str>) -> String {
     }
 }
 
-/// Attach `m.room.encryption` and joined history visibility when the plan is
+/// Attach `m.room.encryption` and invited history visibility when the plan is
 /// to encrypt. Returns the fallback reason for an unencrypted downgrade.
+///
+/// Not `joined`: Continuwuity then refuses federation `/event` requests for
+/// messages sent before an invitee joins, and a Synapse partial-state join of
+/// that invitee never completes.
 fn apply_encryption_plan(
     request: &mut ruma::api::client::room::create_room::v3::Request,
     plan: &RoomEncryptionPlan,
@@ -543,7 +547,7 @@ fn apply_encryption_plan(
             );
             request.initial_state.push(
                 InitialStateEvent::with_empty_state_key(RoomHistoryVisibilityEventContent::new(
-                    HistoryVisibility::Joined,
+                    HistoryVisibility::Invited,
                 ))
                 .to_raw_any(),
             );
