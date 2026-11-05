@@ -49,5 +49,5 @@ The new snippets (identity check, `whoami`, password check, and a wrong-password
 
 ## Follow-ups
 
-- The cause of the agent0-4 watchdog death on or after 2026-10-09 is unknown. At 20:08 UTC, `watchdog.sh` was also not running on agent0-1, agent0-2, or agent0-3. Only agent0-4 (started by hand) and agent0-5 (started at the 06:06 container restart) had one. Find the cause before relying on watchdog restarts fleet-wide.
+- Resolved: `watchdog.sh` was missing on agent0-1, agent0-2, and agent0-3 as well. Root cause and fix are in `spec/Watchdog-Startup-Script-Investigation-20261105.md`. All five agents now run v3.20 `startup-services.sh` and one watchdog each.
 - Back up the agent0-4 and agent0-5 recovery keys off the host (guide step 10). Not confirmed at the time of writing.
