@@ -20,6 +20,7 @@ Validated on g2s with Continuwuity v26.9.1:
 - agent0-5: `spec/T014-Agent0-5-Result-20261104.md` and `spec/T016-Agent0-5-Fleet-Drop-In-Result-20261105.md`.
 - agent0-4: a full run of this guide from a v0.91 state. See `spec/Upgrade-Agent0-4-v0.2.0-rc.1-Result-20261105.md`.
 - agent0-5: a run of this guide on an agent that already had E2EE from a test build. See `spec/Upgrade-Agent0-5-v0.2.0-rc.1-Result-20261105.md`.
+- agent0-1, agent0-2, agent0-3: `spec/Upgrade-Agent0-1-2-3-v0.2.0-rc.1-Result-20261105.md`. Inbound in rooms where the agent posted first needed v0.2.0-rc.2 (`spec/Upgrade-v0.2.0-rc.2-Result-20261105.md`).
 
 ## Read this first
 

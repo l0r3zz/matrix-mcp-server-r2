@@ -20,7 +20,7 @@ All three agents were upgraded with `docs/upgrade-to-v0.2.0.md` between 21:03 an
 
 | Test | agent0-3 | agent0-2 | agent0-1 |
 |---|---|---|---|
-| 1. Encrypted inbound | Blocked (bug below) | Blocked | Blocked |
+| 1. Encrypted inbound | Blocked on rc.1; passed on rc.2 (`Hello`) | Blocked on rc.1; passed on rc.2 (`verified`) | Blocked on rc.1; passed on rc.2 (`and verified`) |
 | 2. Encrypted outbound | Pass | Pass | Pass |
 | 3. Bot ping in Fleet HQ Clean | Pass | Pass | Pass (bot not restarted; reconnected after the homeserver restart) |
 | 4. Stability, 21:04-21:30 UTC | Pass (`run_bot` 60585, `run_mcp` 60849) | Pass (2803061, 2803729) | Pass (3443612, 3775500) |
