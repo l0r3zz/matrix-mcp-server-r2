@@ -47,7 +47,7 @@ SKIP_MATRIX_INIT=true cargo run
 ```
 src/
   main.rs              -- Axum app: /health, /mcp, graceful shutdown
-  health.rs            -- GET /health JSON, including e2ee and crossSigned
+  health.rs            -- GET /health JSON, including e2ee, crossSigned, and botEnabled
   lib.rs
   config.rs            -- Config from env vars (OAuth/HTTPS/E2EE fields present but partial)
   error.rs
@@ -59,6 +59,13 @@ src/
     cache.rs           -- TTL client cache (15-min TTL, periodic cleanup)
   mcp/
     server.rs          -- MatrixMcpServer: #[tool_router], 22 #[tool] methods
+  bot/
+    mod.rs             -- Register the message handler on the shared client when BOT_ENABLED=true.
+    trigger.rs         -- Prefixes from the session user id, and the decision order.
+    dispatch.rs        -- Fast replies and one Agent Zero reply via room.send.
+    agent_zero.rs      -- POST /api/api_message, key re-read on HTTP 401, HTML chunks.
+    trusted.rs         -- GET trusted-senders, join only a trusted invite, greet once.
+    state.rs           -- room_contexts.json and processed_event_ids.json. No sync cursor.
 tests/
   config_tests.rs, cache_tests.rs, integration_tests.rs, health_tests.rs,
   server_tool_list_tests.rs, e2ee_tests.rs (`e2ee` feature)
@@ -83,6 +90,14 @@ Copy `.env.example` to `.env`. Key variables:
 - `CRYPTO_STORE_PATH` -- SQLite store directory (mode `0700`). `.device-id` and `.store.lock` live here
 - `MATRIX_RECOVERY_KEY_FILE` -- defaults to `$CRYPTO_STORE_PATH/recovery-key`. Contents are never logged
 - `MATRIX_UIAA_PASSWORD_FILE` -- optional mode-0600 password file. Read only when `/keys/device_signing/upload` returns UIAA. Contents are never logged
+- `BOT_ENABLED` -- `true` registers the message handler on the shared client. Any other value, including unset, leaves it off. `GET /health` reports `botEnabled: true` only after that registration
+- `BOT_DISPLAY_NAME` -- empty by default. A non-empty value is set on the shared client at startup when the bot is on
+- `AGENT_IDENTITY` -- fast-reply name. Defaults to `BOT_DISPLAY_NAME`, then `Agent Zero`
+- `A0_API_URL` -- default `http://localhost:80/api/api_message`
+- `AMCTL_URL` -- default `http://172.23.88.254:8077`
+- `AMCTL_API_KEY` -- unset. Never logged
+- `TRUSTED_SENDERS` -- comma-separated fallback ids. Unset
+- `BOT_STATE_DIR` -- default `/a0/usr/workdir/matrix-bot`
 
 OAuth/HTTPS env vars exist in config.rs but are partially implemented. The crypto store opens only when the `e2ee` feature and `E2EE_ENABLED=true` are both set. Recovery secrets resolve in order: `backupPassphraseRef` (errors until a secret-manager backend exists), `backupPassphraseEnvVar` (variable name, not the secret), then `MATRIX_RECOVERY_KEY_FILE`. A missing file means no secret.
 
@@ -98,7 +113,8 @@ OAuth/HTTPS env vars exist in config.rs but are partially implemented. The crypt
 - **Bootstrap**: Startup runs `bootstrap_e2ee` when the store is open. The `bootstrap-e2ee` tool calls the same path. A new identity writes `recovery-key` mode `0600`. An existing identity with no secret returns `IdentityExistsError`. `forceRecreate` does not call `reset_cross_signing`. Key-backup download of joined rooms runs after the call returns (`keyBackupRestore`: `running`, then `done` or `failed`)
 - **Room encryption**: `create-room` and `send-direct-message` take optional `encryptionMode` (`auto`, `e2ee`, `none`). When E2EE is active, omitted means `auto`: `/keys/query` runs before the room is created. All invitees cross-signed, or no invitees, sets `m.room.encryption` and history visibility `invited`. Do not use `joined`: Continuwuity then refuses federation `/event` for messages sent before an invitee joins, and the invitee's Synapse join never completes. An invitee without keys falls back to an unencrypted room in `auto` (`Encrypted: No (fallback: @user:domain has no cross-signed E2EE keys)`) and returns `TrustPolicyNotSatisfiedError` in `e2ee`. A keys-query failure does not create the room. `none` stays unencrypted
 - **Messages**: `send-message` reports `Encrypted: Yes` or `Encrypted: No`. Readers keep unable-to-decrypt events as `[Encrypted message - unable to decrypt (missing_key)]`. An encrypted send while E2EE is inactive returns `CryptoNotBootstrappedError`
-- **Status**: `get-encryption-status` reports device, store, trust, and optional room encryption. `GET /health` always includes `e2ee` and `crossSigned`. Both are false when the `e2ee` feature, `E2EE_ENABLED`, or `SKIP_MATRIX_INIT` keeps crypto off. A binary without the feature returns `E2EE support not enabled; rebuild with --features e2ee` from the two E2EE tools
+- **Status**: `get-encryption-status` reports device, store, trust, and optional room encryption. `GET /health` always includes `e2ee`, `crossSigned`, and `botEnabled`. The crypto flags are false when the `e2ee` feature, `E2EE_ENABLED`, or `SKIP_MATRIX_INIT` keeps crypto off. `botEnabled` is true only when `BOT_ENABLED=true` and the dispatcher handlers were registered. A binary without the feature returns `E2EE support not enabled; rebuild with --features e2ee` from the two E2EE tools
+- **Bot foundation**: `src/bot/` uses the client from `src/matrix/client.rs` only when `BOT_ENABLED=true`. It does not open `CRYPTO_STORE_PATH` or start a second sync. The message handler and the invite handler are registered before that sync. Fast replies (`ping`, `hello`, `whoami`) go out with `room.send()` and do not call Agent Zero. A question is posted to `A0_API_URL` on its own task. The reply is HTML from `pulldown-cmark`, sent once from `src/bot/` in chunks of at most 4000 characters. An invite joins only when `GET {AMCTL_URL}/api/v1/trusted-senders` names the inviter, or when that lookup fails and `TRUSTED_SENDERS` fills an empty set. The greeting is sent once. Encrypted events are decrypted only in a build with `--features e2ee`. State files are `room_contexts.json` and `processed_event_ids.json` under `BOT_STATE_DIR`. The Agent Zero key is `{BOT_STATE_DIR}/.a0-api-key` and is never logged. `AMCTL_API_KEY` is never logged. `sync_cursor.json` is not used
 - **Tool macros**: `#[tool_router]` + `#[tool]` on impl blocks; camelCase JSON via serde rename
 - **No OAuth yet**: Config fields exist but auth.rs is minimal -- OAuth is planned, not implemented
 - **Release profile**: LTO + strip + codegen-units=1 for small/fast binary
@@ -122,3 +138,4 @@ OAuth/HTTPS env vars exist in config.rs but are partially implemented. The crypt
 - Use `unwrap()` in tool implementations -- use proper error handling (thiserror/anyhow)
 - Break camelCase tool input naming convention
 - Modify `reference/` directory (it's a frozen snapshot)
+- Hardcode `@agent0-1` as a default user, trigger, or lab target. Derive `@agent0-N` from the process Matrix user id. A concrete lab target is `@agent0-5`

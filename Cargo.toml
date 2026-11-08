@@ -58,6 +58,9 @@ async-trait = "0.1"
 # URL parsing
 url = "2.5"
 
+# Markdown to HTML for bot replies. Used by src/bot/ in a later task.
+pulldown-cmark = "0.13"
+
 [dev-dependencies]
 tokio-test = "0.4"
 wiremock = "0.6"
