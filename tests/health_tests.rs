@@ -16,6 +16,7 @@ async fn get_health_reports_e2ee_off_when_matrix_init_is_skipped() {
                 "0.1.1",
                 e2ee,
                 cross_signed,
+                false,
             ))
         }),
     );
@@ -35,5 +36,6 @@ async fn get_health_reports_e2ee_off_when_matrix_init_is_skipped() {
     let body: serde_json::Value = serde_json::from_slice(&bytes).expect("health json");
     assert_eq!(body["e2ee"], false);
     assert_eq!(body["crossSigned"], false);
+    assert_eq!(body["botEnabled"], false);
     assert_eq!(body["user_id"], "@bot:localhost");
 }

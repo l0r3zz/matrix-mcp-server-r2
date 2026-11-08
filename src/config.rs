@@ -42,6 +42,23 @@ pub struct Config {
     /// Tools will return errors, but the MCP protocol layer is fully
     /// functional. Useful for MCP Inspector validation.
     pub skip_matrix_init: bool,
+
+    /// `true` only when `BOT_ENABLED=true`. Any other value leaves the bot off.
+    pub bot_enabled: bool,
+    /// Matrix display name. Empty means do not set one.
+    pub bot_display_name: String,
+    /// Name used in fast replies. `AGENT_IDENTITY`, then `BOT_DISPLAY_NAME`, then `Agent Zero`.
+    pub agent_identity: String,
+    /// Agent Zero message endpoint.
+    pub a0_api_url: String,
+    /// am-ctl base URL. The API key is never logged.
+    pub amctl_url: String,
+    /// am-ctl API key. Absent when unset. Never logged.
+    pub amctl_api_key: Option<String>,
+    /// Fallback Matrix ids used only when the am-ctl trusted-sender fetch fails.
+    pub trusted_senders: Vec<String>,
+    /// Directory for `room_contexts.json`, `processed_event_ids.json`, and `.a0-api-key`.
+    pub bot_state_dir: String,
 }
 
 impl Config {
@@ -139,6 +156,19 @@ impl Config {
             skip_matrix_init: env::var("SKIP_MATRIX_INIT")
                 .map(|v| v == "true" || v == "1")
                 .unwrap_or(false),
+            bot_enabled: env::var("BOT_ENABLED")
+                .map(|v| v == "true")
+                .unwrap_or(false),
+            bot_display_name: nonempty_env("BOT_DISPLAY_NAME").unwrap_or_default(),
+            agent_identity: agent_identity_from_env(),
+            a0_api_url: nonempty_env("A0_API_URL")
+                .unwrap_or_else(|| "http://localhost:80/api/api_message".to_string()),
+            amctl_url: nonempty_env("AMCTL_URL")
+                .unwrap_or_else(|| "http://172.23.88.254:8077".to_string()),
+            amctl_api_key: nonempty_env("AMCTL_API_KEY"),
+            trusted_senders: trusted_senders_from_env(),
+            bot_state_dir: nonempty_env("BOT_STATE_DIR")
+                .unwrap_or_else(|| "/a0/usr/workdir/matrix-bot".to_string()),
         })
     }
 
@@ -179,6 +209,28 @@ impl Config {
 
         Ok(())
     }
+}
+
+fn agent_identity_from_env() -> String {
+    if let Some(identity) = nonempty_env("AGENT_IDENTITY") {
+        return identity;
+    }
+    if let Some(display_name) = nonempty_env("BOT_DISPLAY_NAME") {
+        return display_name;
+    }
+    "Agent Zero".to_string()
+}
+
+fn trusted_senders_from_env() -> Vec<String> {
+    nonempty_env("TRUSTED_SENDERS")
+        .map(|raw| {
+            raw.split(',')
+                .map(str::trim)
+                .filter(|value| !value.is_empty())
+                .map(str::to_string)
+                .collect()
+        })
+        .unwrap_or_default()
 }
 
 fn nonempty_env(name: &str) -> Option<String> {

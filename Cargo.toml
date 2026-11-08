@@ -1,6 +1,6 @@
 [package]
 name = "matrix-mcp-server-r2"
-version = "0.2.0"
+version = "0.3.0"
 edition = "2021"
 authors = ["l0r3zz"]
 description = "Rust implementation of Matrix MCP Server - drop-in replacement for TypeScript version"
@@ -57,6 +57,9 @@ async-trait = "0.1"
 
 # URL parsing
 url = "2.5"
+
+# Markdown to HTML for bot replies. Used by src/bot/ in a later task.
+pulldown-cmark = "0.13"
 
 [dev-dependencies]
 tokio-test = "0.4"

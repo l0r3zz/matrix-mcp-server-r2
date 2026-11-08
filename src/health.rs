@@ -14,8 +14,20 @@ pub fn health_flags(
     (e2ee, e2ee && device_cross_signed)
 }
 
-/// JSON body for `GET /health`. Both crypto flags are always present.
-pub fn health_response(user_id: &str, version: &str, e2ee: bool, cross_signed: bool) -> Value {
+/// `botEnabled` is true only when the operator set `BOT_ENABLED=true` and the
+/// dispatcher handlers were registered.
+pub fn bot_enabled_flag(configured: bool, handlers_registered: bool) -> bool {
+    configured && handlers_registered
+}
+
+/// JSON body for `GET /health`. Crypto flags and `botEnabled` are always present.
+pub fn health_response(
+    user_id: &str,
+    version: &str,
+    e2ee: bool,
+    cross_signed: bool,
+    bot_enabled: bool,
+) -> Value {
     json!({
         "status": "healthy",
         "server": "matrix-mcp-server-r2",
@@ -23,6 +35,7 @@ pub fn health_response(user_id: &str, version: &str, e2ee: bool, cross_signed: b
         "user_id": user_id,
         "e2ee": e2ee,
         "crossSigned": cross_signed,
+        "botEnabled": bot_enabled,
     })
 }
 
@@ -35,9 +48,18 @@ mod tests {
         let (e2ee, cross_signed) = health_flags(true, true, true);
         assert!(!e2ee);
         assert!(!cross_signed);
-        let body = health_response("@bot:localhost", "0.1.1", e2ee, cross_signed);
+        let body = health_response("@bot:localhost", "0.1.1", e2ee, cross_signed, false);
         assert_eq!(body["e2ee"], false);
         assert_eq!(body["crossSigned"], false);
+        assert_eq!(body["botEnabled"], false);
         assert_eq!(body["status"], "healthy");
+    }
+
+    #[test]
+    fn bot_enabled_requires_config_and_registered_handlers() {
+        assert!(!bot_enabled_flag(false, false));
+        assert!(!bot_enabled_flag(true, false));
+        assert!(!bot_enabled_flag(false, true));
+        assert!(bot_enabled_flag(true, true));
     }
 }

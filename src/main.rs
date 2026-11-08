@@ -2,6 +2,7 @@ use std::sync::Arc;
 use tracing::info;
 
 mod auth;
+mod bot;
 mod config;
 mod error;
 mod health;
@@ -95,6 +96,22 @@ async fn main() -> Result<(), AppError> {
         )
         .await?;
         let client = initialized.client;
+        if config.bot_enabled {
+            bot::attach(
+                &client,
+                &bot::Session {
+                    user_id: config.matrix_user_id.clone(),
+                    display_name: config.bot_display_name.clone(),
+                    identity: config.agent_identity.clone(),
+                    state_dir: config.bot_state_dir.clone().into(),
+                    a0_api_url: config.a0_api_url.clone(),
+                    amctl_url: config.amctl_url.clone(),
+                    amctl_api_key: config.amctl_api_key.clone(),
+                    trusted_senders: config.trusted_senders.clone(),
+                },
+            )
+            .await;
+        }
         let sync_handle = matrix::client::start_background_sync(client.clone());
         let cache = matrix::ClientCache::new();
         let cleanup_handle = cache.start_cleanup_task();
@@ -145,11 +162,16 @@ async fn main() -> Result<(), AppError> {
                         false,
                     );
                     let cross_signed = e2ee && health_cross_signed(&health_client).await;
+                    let bot_enabled = health::bot_enabled_flag(
+                        health_config.bot_enabled,
+                        bot::handlers_registered(),
+                    );
                     axum::Json(health::health_response(
                         &health_config.matrix_user_id,
                         VERSION,
                         e2ee,
                         cross_signed,
+                        bot_enabled,
                     ))
                 }
             }),

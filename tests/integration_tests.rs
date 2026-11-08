@@ -53,6 +53,14 @@ fn test_config(homeserver_url: &str) -> Arc<Config> {
         uiaa_password_file: None,
         debug: false,
         skip_matrix_init: false,
+        bot_enabled: false,
+        bot_display_name: String::new(),
+        agent_identity: "Agent Zero".to_string(),
+        a0_api_url: "http://localhost:80/api/api_message".to_string(),
+        amctl_url: "http://172.23.88.254:8077".to_string(),
+        amctl_api_key: None,
+        trusted_senders: Vec::new(),
+        bot_state_dir: "/a0/usr/workdir/matrix-bot".to_string(),
     })
 }
 
