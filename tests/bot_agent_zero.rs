@@ -86,6 +86,99 @@ async fn first_turn_sends_an_empty_context_and_stores_the_returned_id() {
 }
 
 #[tokio::test]
+async fn missing_context_retries_once_with_a_fresh_context_and_stores_it() {
+    let server = MockServer::start().await;
+    let dir = temp_dir("missing-context");
+    write_key(&dir, "key-context");
+    std::fs::write(
+        dir.join("room_contexts.json"),
+        serde_json::to_vec(&serde_json::json!({"!room:example.com": "ctx-expired"}))
+            .expect("contexts"),
+    )
+    .expect("write contexts");
+    let seen = Arc::new(Mutex::new(Vec::new()));
+    let seen_handler = Arc::clone(&seen);
+    Mock::given(method("POST"))
+        .and(path("/api/api_message"))
+        .respond_with(move |request: &Request| {
+            let attempt = {
+                let mut seen = seen_handler.lock().expect("seen");
+                seen.push(request_view(request));
+                seen.len()
+            };
+            if attempt == 1 {
+                ResponseTemplate::new(404)
+                    .set_body_json(serde_json::json!({"error": "Context not found"}))
+            } else {
+                ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                    "response": "fresh context reply",
+                    "context_id": "ctx-fresh"
+                }))
+            }
+        })
+        .mount(&server)
+        .await;
+
+    let reply = complete_turn(&turn(
+        format!("{}/api/api_message", server.uri()),
+        dir.clone(),
+        "try again",
+    ))
+    .await
+    .expect("fresh context reply");
+    assert_eq!(reply, "fresh context reply");
+    let seen = seen.lock().expect("seen");
+    assert_eq!(seen.len(), 2);
+    assert_eq!(seen[0].context_id, "ctx-expired");
+    assert_eq!(seen[1].context_id, "");
+    assert_eq!(seen[0].message, seen[1].message);
+    let stored = std::fs::read_to_string(dir.join("room_contexts.json")).expect("contexts");
+    let map: serde_json::Value = serde_json::from_str(&stored).expect("json");
+    assert_eq!(map["!room:example.com"], "ctx-fresh");
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+#[tokio::test]
+async fn unrelated_404_does_not_retry_or_clear_the_saved_context() {
+    let server = MockServer::start().await;
+    let dir = temp_dir("unrelated-404");
+    write_key(&dir, "key-404");
+    std::fs::write(
+        dir.join("room_contexts.json"),
+        serde_json::to_vec(&serde_json::json!({"!room:example.com": "ctx-existing"}))
+            .expect("contexts"),
+    )
+    .expect("write contexts");
+    let seen = Arc::new(Mutex::new(Vec::new()));
+    let seen_handler = Arc::clone(&seen);
+    Mock::given(method("POST"))
+        .and(path("/api/api_message"))
+        .respond_with(move |request: &Request| {
+            seen_handler
+                .lock()
+                .expect("seen")
+                .push(request_view(request));
+            ResponseTemplate::new(404).set_body_json(serde_json::json!({"error": "Not Found"}))
+        })
+        .mount(&server)
+        .await;
+
+    let error = complete_turn(&turn(
+        format!("{}/api/api_message", server.uri()),
+        dir.clone(),
+        "what failed",
+    ))
+    .await
+    .expect_err("unrelated 404");
+    assert_eq!(error, AgentZeroError::AgentZeroUnavailable);
+    assert_eq!(seen.lock().expect("seen").len(), 1);
+    let stored = std::fs::read_to_string(dir.join("room_contexts.json")).expect("contexts");
+    let map: serde_json::Value = serde_json::from_str(&stored).expect("json");
+    assert_eq!(map["!room:example.com"], "ctx-existing");
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+#[tokio::test]
 async fn http_401_rereads_the_key_once_and_retries_once() {
     let server = MockServer::start().await;
     let dir = temp_dir("retry");

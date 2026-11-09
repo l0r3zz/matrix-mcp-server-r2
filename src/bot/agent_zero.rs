@@ -38,8 +38,9 @@ pub struct AskSuccess {
 
 /// POST one turn, store a changed context id, and return the reply text.
 ///
-/// A 401 re-reads `.a0-api-key` once and retries the POST once. Failure returns
-/// an error and does not invent a reply.
+/// A 401 re-reads `.a0-api-key` once and retries the POST once. An exact
+/// `404 Context not found` for a saved context retries once with a fresh context.
+/// Failure returns an error and does not invent a reply.
 ///
 /// The process binary reaches the same POST through [`ask`]. This wrapper is
 /// the integration-test entry that also updates `room_contexts.json`.
@@ -77,6 +78,18 @@ pub(crate) async fn ask(
         .build()
         .map_err(|_| AgentZeroError::AgentZeroUnavailable)?;
     let response = post(&client, &turn.api_url, &key, &message, context_id).await?;
+    if !context_id.is_empty() && response.status().as_u16() == 404 {
+        if is_missing_context(response).await {
+            tracing::warn!(
+                room_id = %turn.room_id,
+                "Agent Zero context not found; retrying with a fresh context"
+            );
+            let response = post(&client, &turn.api_url, &key, &message, "").await?;
+            return parse_success(response).await;
+        }
+        tracing::warn!(status = 404, "AgentZeroUnavailable");
+        return Err(AgentZeroError::AgentZeroUnavailable);
+    }
     if response.status().as_u16() == 401 {
         let Some(retried_key) = read_key(&turn.state_dir) else {
             tracing::warn!(status = 401, "AgentZeroAuth");
@@ -195,6 +208,19 @@ async fn post(
         .send()
         .await
         .map_err(|_| AgentZeroError::AgentZeroUnavailable)
+}
+
+async fn is_missing_context(response: matrix_sdk::reqwest::Response) -> bool {
+    let Ok(bytes) = response.bytes().await else {
+        return false;
+    };
+    let Ok(value) = serde_json::from_slice::<serde_json::Value>(&bytes) else {
+        return false;
+    };
+    value
+        .get("error")
+        .and_then(serde_json::Value::as_str)
+        .is_some_and(|error| error.trim().eq_ignore_ascii_case("Context not found"))
 }
 
 async fn parse_success(

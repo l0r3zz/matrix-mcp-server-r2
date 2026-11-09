@@ -63,7 +63,7 @@ src/
     mod.rs             -- Register the message handler on the shared client when BOT_ENABLED=true.
     trigger.rs         -- Prefixes from the session user id, and the decision order.
     dispatch.rs        -- Fast replies and one Agent Zero reply via room.send.
-    agent_zero.rs      -- POST /api/api_message, key re-read on HTTP 401, HTML chunks.
+    agent_zero.rs      -- POST /api/api_message, key re-read on HTTP 401, one fresh-context retry on an exact `404 Context not found`, HTML chunks.
     trusted.rs         -- GET trusted-senders, join only a trusted invite, greet once.
     state.rs           -- room_contexts.json and processed_event_ids.json. No sync cursor.
 tests/
