@@ -8,8 +8,8 @@ store per agent container, serving:
 1. **Proactive MCP Tools (`/mcp`)**: A unified `20 + 2` tool surface where the
    20 existing tool names transparently support Cross-Signed E2EE by default
    (with automatic pre-flight `/keys/query` fallback to unencrypted rooms when
-   an invitee lacks cross-signed E2EE keys), plus `bootstrap-e2ee` and
-   `get-encryption-status`.
+   an invitee lacks cross-signed E2EE keys), plus `bootstrap_e2ee` and
+   `get_encryption_status`.
 2. **Reactive Inbound Bot Dispatcher (`src/bot/`, feature `003-integrated-matrix-bot`)**:
    Absorbs `matrix-bot`'s reactive `/sync` event loop (trusted-invite
    auto-join, `@agent0-N` trigger filtering, `room_contexts.json`, and
@@ -25,21 +25,21 @@ is `.specify/specs/002-e2ee-cross-signing/spec.md`; reactive bot absorption is
 
 ### I. Unified Tool Surface & Seamless E2EE By Default
 
-The 20 existing MCP tool names (`create-room`, `send-direct-message`,
-`send-message`, `get-room-messages`, `get-messages-by-date`,
-`identify-active-users`, etc.) MUST remain stable so external MCP clients
+The 20 existing MCP tool names (`create_room`, `send_direct_message`,
+`send_message`, `get_room_messages`, `get_messages_by_date`,
+`identify_active_users`, etc.) MUST remain stable so external MCP clients
 (Agent Zero, Cursor IDE, automation scripts) gain E2EE without changing tool
 names or call patterns. Do not split tools into duplicate `-r2` variants or
 reject encrypted rooms with `EncryptedRoomError`. When E2EE is enabled:
-- `create-room` and `send-direct-message` default to `encryptionMode: "auto"`:
+- `create_room` and `send_direct_message` default to `encryptionMode: "auto"`:
   they query `/_matrix/client/v3/keys/query` for all invitees and create an
   encrypted (`m.room.encryption`) room when all invitees have cross-signed E2EE
   keys (or no invitees are specified), or automatically fall back to an
   unencrypted room (reporting the fallback in the tool output) if an invitee
   has no cross-signed E2EE keys. Network or federation failures during
   `/keys/query` MUST fail closed (never downgrade on a transient error).
-- `send-message`, `get-room-messages`, `get-messages-by-date`, and
-  `identify-active-users` operate transparently on both encrypted and
+- `send_message`, `get_room_messages`, `get_messages_by_date`, and
+  `identify_active_users` operate transparently on both encrypted and
   unencrypted rooms.
 
 ### II. Feature-Gated E2EE
@@ -48,8 +48,8 @@ All E2EE code paths MUST be gated behind the `e2ee` Cargo feature flag. The
 server MUST build and run correctly without E2EE support when the feature is
 not enabled. When built with `--features e2ee` and configured with
 `E2EE_ENABLED=true`, the server MUST automatically bootstrap device keys and
-cross-signing at startup. When E2EE is not compiled in, `bootstrap-e2ee` and
-`get-encryption-status` MUST return a clear message indicating how to enable
+cross-signing at startup. When E2EE is not compiled in, `bootstrap_e2ee` and
+`get_encryption_status` MUST return a clear message indicating how to enable
 the feature.
 
 ### III. Rust Idioms and Safety
@@ -162,7 +162,7 @@ src/
     client.rs          -- matrix-sdk 0.19 client, SQLite store, auto-bootstrap, sync loop
     cache.rs           -- TTL-based client cache
   mcp/
-    server.rs          -- MatrixMcpServer: 20 unified tools + bootstrap-e2ee & get-encryption-status
+    server.rs          -- MatrixMcpServer: 20 unified tools + bootstrap_e2ee & get_encryption_status
   bot/                 -- (Stage 2 / 003) Reactive sync dispatcher to Agent Zero /api/api_message
 spec/
   matrix-mcp-v1-v2.yml -- Unified API contract (20 operational tools + 2 E2EE management tools)
@@ -175,7 +175,7 @@ spec/
 
 Naming:
 
-- MCP tools: `kebab-case` (for example, `list-joined-rooms`, `create-room`, `send-message`, `bootstrap-e2ee`, `get-encryption-status`). Do not add `-r2` suffixes.
+- MCP tools: `snake_case`, the Rust method name that rmcp registers (for example, `list_joined_rooms`, `create_room`, `send_message`, `bootstrap_e2ee`, `get_encryption_status`). Do not set a kebab-case `name` attribute. Do not add `-r2` suffixes.
 - Tool JSON inputs: `camelCase` via `#[serde(rename = "...")]` (with `alias` for `snake_case` where helpful).
 - Rust modules: `snake_case`
 - Environment variables: `SCREAMING_SNAKE_CASE`
@@ -226,4 +226,6 @@ Compliance review: a change that touches tool contracts, crypto, or the
 implementation. A locked stack version MUST NOT change inside a feature
 spec. That change requires an amendment here first.
 
-**Version**: 2.0.3 | **Ratified**: 2026-05-11 | **Last Amended**: 2026-11-01
+**Version**: 2.0.4 | **Ratified**: 2026-05-11 | **Last Amended**: 2026-11-09
+
+Amendment 2.0.4 (PATCH): tool names in this file now use the registered snake_case names. The runtime names did not change. `20 + 2` stays until `list_invitations` ships. That growth is a later MINOR bump.

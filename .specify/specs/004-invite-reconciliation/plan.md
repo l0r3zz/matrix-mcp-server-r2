@@ -51,7 +51,7 @@
 - **Principle VIII (Container-Aware)**: `/health` is unchanged. Retry state is in memory and restarts from zero.
 - **Principle IX (Incremental Delivery)**: **Amendment required**: add `004-invite-reconciliation` to the roadmap list. 004 is off unless `BOT_ENABLED=true`. `list_invitations` works either way.
 - **Principle X (Spec-Driven)**: This plan, `research.md`, `data-model.md`, `contracts/list-invitations.md`, and `quickstart.md` are the design.
-- **Naming (Development Workflow)**: The constitution says MCP tools are kebab-case. The registered names are snake_case, because rmcp uses the method name (for example `join_room`). Principle I and Principle II also list kebab-case names, and so do `spec/matrix-mcp-v1-v2.yml`, `README.md`, and `.cursor/rules/`. **Amendment required**: rename every tool name in those files to the registered snake_case name (T001, T002, T025, T026). The runtime names do not change, so Principle I stability holds. `list_invitations` follows the real convention.
+- **Naming (Development Workflow)**: Constitution v2.0.4 names MCP tools in snake_case. The registered names already match, because rmcp uses the method name (for example `join_room`). `spec/matrix-mcp-v1-v2.yml`, `README.md`, and `.cursor/rules/` still use kebab-case. **Amendment required**: rename every tool name in those files to the registered snake_case name (T002, T025, T026). The runtime names do not change, so Principle I stability holds. `list_invitations` follows the real convention.
 
 Gate result: PASS, with the three amendments above done in the first task of `tasks.md`.
 
@@ -87,7 +87,7 @@ src/main.rs                  # create the registry and Notify; spawn the reconci
 tests/bot_invites.rs         # new: wiremock /sync rooms.invite + /join
 tests/server_tool_list_tests.rs  # tool list includes list_invitations
 spec/matrix-mcp-v1-v2.yml    # list_invitations contract
-.specify/memory/constitution.md  # v2.1.0
+.specify/memory/constitution.md  # v2.0.4 now; T001 bumps it to v2.1.0
 src/AGENTS.md                # DOX: invites.rs, list_invitations, startup order
 ```
 

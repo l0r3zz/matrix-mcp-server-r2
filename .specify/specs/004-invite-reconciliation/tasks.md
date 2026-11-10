@@ -25,12 +25,11 @@ Principle III applies to every task:
 
 **Purpose**: Governance and contract updates, and the empty module.
 
-- [ ] T001 Amend `.specify/memory/constitution.md` to v2.1.0 (MINOR), and add a Sync Impact Report entry:
-  - Change `20 + 2` to `21 + 2` on lines 8 and 118.
+- [ ] T001 Amend `.specify/memory/constitution.md` from v2.0.4 to v2.1.0 (MINOR):
+  - v2.0.4 already renamed every tool name in this file to snake_case. Do not change those names again.
+  - Change `20 + 2` to `21 + 2` where the file states the current tool surface, including the preamble and Principle IX.
   - Add `004-invite-reconciliation` to the Principle IX roadmap.
-  - Change the naming line (line 178) from `kebab-case` to `snake_case`, with the examples `list_joined_rooms`, `join_room`, `bootstrap_e2ee`, `get_encryption_status`, and `list_invitations`.
-  - Rename every tool name in the constitution text to the registered snake_case name: Principle I (lines 28 to 30, 35, and 41) and Principle II (lines 51 and 52). For example, `create-room` becomes `create_room`, and `send-direct-message` becomes `send_direct_message`.
-  - In the Sync Impact Report, say that the runtime names do not change. rmcp has always registered the method name, so this is a documentation fix, and Principle I stability holds.
+  - Add `list_invitations` to the naming examples.
   - Do not change the locked stack table.
 - [ ] T002 [P] Update `spec/matrix-mcp-v1-v2.yml`:
   - Rename every tool `name:` and every tool name in the descriptions to the registered snake_case name. Check each name against the `#[tool]` method names in `src/mcp/server.rs`.
@@ -111,7 +110,7 @@ Principle III applies to every task:
   - Check `roomId`, `name`, `canonicalAlias`, `topic`, `inviter`, and `encryption`.
   - Check `trusted: "unknown"` and `attempts: 0` with an inactive registry (FR-011).
   - Check that the output does not contain the test access token string (FR-012).
-- [ ] T016 [P] [US2] In `tests/server_tool_list_tests.rs`, assert that the tool router lists `list_invitations`, and that it lists exactly 22 tools (21 + 2) in both feature builds. Both E2EE tools are registered without the `e2ee` feature (Principle II).
+- [ ] T016 [P] [US2] In `tests/server_tool_list_tests.rs`, assert that the tool router lists `list_invitations`, and that it lists exactly 23 tools (21 + 2) in both feature builds. Both E2EE tools are registered without the `e2ee` feature (Principle II).
 
 ### Implementation for User Story 2
 

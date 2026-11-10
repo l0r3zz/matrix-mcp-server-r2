@@ -101,6 +101,6 @@
 
 ## R11. Tool naming
 
-**Decision**: The new tool is named `list_invitations`. Amend the constitution naming line to snake_case.
+**Decision**: The new tool is named `list_invitations`. Constitution v2.0.4 already uses snake_case for every tool name.
 
-**Rationale**: rmcp derives the tool name from the method name. Every registered tool is snake_case, for example `join_room` and `list_joined_rooms`. The constitution's kebab-case example (`list-joined-rooms`) does not match the running server.
+**Rationale**: rmcp derives the tool name from the method name. Every registered tool is snake_case, for example `join_room` and `list_joined_rooms`. The v2.0.3 kebab-case examples did not match the running server.
