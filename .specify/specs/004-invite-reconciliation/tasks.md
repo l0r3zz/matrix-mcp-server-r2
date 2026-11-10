@@ -106,6 +106,7 @@ Principle III applies to every task:
   - At most 100 entries are returned, with `truncated: true` when more exist.
   - An empty input gives `{"count":0,"truncated":false,"invitations":[]}`.
   - `trusted` is `"true"`, `"false"`, or `"unknown"`, and `encryption` is `"encrypted"`, `"unencrypted"`, or `"unknown"`.
+  - `SkipNoInviter` renders `"trusted": "false"` and `"inviter": null`. `SkipUntrusted` renders `"trusted": "false"` with the inviter id. `Join` renders `"trusted": "true"`.
 - [ ] T015 [P] [US2] Add a wiremock test in `tests/bot_invites.rs` that calls `MatrixMcpServer::list_invitations` after one `/sync` with two invites:
   - Check `roomId`, `name`, `canonicalAlias`, `topic`, `inviter`, and `encryption`.
   - Check `trusted: "unknown"` and `attempts: 0` with an inactive registry (FR-011).
@@ -114,7 +115,7 @@ Principle III applies to every task:
 
 ### Implementation for User Story 2
 
-- [ ] T017 [US2] Add `InvitationView` and `render_invitations(Vec<InvitationView>) -> serde_json::Value` in `src/bot/invites.rs`, following the field table in `contracts/list-invitations.md`. `lastError` uses the `JoinError` display, and "never a server message body".
+- [ ] T017 [US2] Add `InvitationView` and `render_invitations(Vec<InvitationView>) -> serde_json::Value` in `src/bot/invites.rs`, following the field table in `contracts/list-invitations.md`. Map `Join` to `"trusted": "true"`, and map `SkipUntrusted` and `SkipNoInviter` to `"trusted": "false"`. `SkipNoInviter` also sets `inviter` to null. Use `"unknown"` only when the reconciler is inactive or has not decided the room. `lastError` uses the `JoinError` display, and "never a server message body".
 - [ ] T018 [US2] Add the `#[tool]` method `list_invitations` in `src/mcp/server.rs`, with no input. For each `client.invited_rooms()` entry:
   - Read `name()`, then `cached_display_name()`.
   - Read `canonical_alias()`, `topic()`, and `encryption_state()`.
@@ -170,6 +171,7 @@ Principle III applies to every task:
 ## Phase 6: Polish and Release
 
 - [ ] T025 [P] Update `src/AGENTS.md`:
+  - Rename every kebab-case tool name in `src/AGENTS.md` to the registered snake_case name. The current names include `create-room`, `send-message`, `send-direct-message`, `bootstrap-e2ee`, and `get-encryption-status`. The target names are `create_room`, `send_message`, `send_direct_message`, `bootstrap_e2ee`, and `get_encryption_status`.
   - Add `src/bot/invites.rs`, the new startup order (attach, reconciler, then background sync), `list_invitations`, and the `21 + 2` tool count.
   - Say that the 004 reconciler replaces the 003 invite event handler. Leave `.specify/specs/003-integrated-matrix-bot/` unchanged as the 003 record.
   - Update the root `AGENTS.md` to `21 + 2`.

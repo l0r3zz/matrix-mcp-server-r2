@@ -19,7 +19,7 @@
 - Q: Which inviters may make an agent join a room automatically? → A: The 003 trusted set. That is the am-ctl trusted senders, then `TRUSTED_SENDERS` while the set is empty. No new setting is added. A failed lookup with an empty fallback does not join.
 - Q: Is automatic joining on or off by default? → A: Unchanged from 003. It applies when `BOT_ENABLED=true` and the trusted set is not empty.
 - Q: Does the agent post the greeting after an automatic join? → A: Yes. It posts it once per room, for rooms joined at startup and at runtime.
-- Q: How do failed joins retry? → A: Up to 5 attempts per room. The wait starts at 30 seconds, doubles each time, stops growing at 15 minutes, and has random jitter. After the fifth failure, the agent stops trying and shows the last error in the invite list.
+- Q: How do failed joins retry? → A: Up to 5 attempts per room. The wait starts at 30 seconds, doubles each time, stops growing at 15 minutes, and has jitter. The Assumptions define that jitter. After the fifth failure, the agent stops trying and shows the last error in the invite list.
 - Q: Which agent is the canary? → A: `@agent0-2`, where the bug was found. This is a stated exception to the `@agent0-5` lab default. Requirements still use `@agent0-N`.
 - Q: What is the name of the discovery tool? → A: `list_invitations`.
 - Q: When a join fails with an error that will not change on retry, should the agent stop retrying at once? → A: Yes. A permanent error (HTTP 403 or 404, or the matching Matrix error code) stops retries at once and is shown in `list_invitations`. Network errors, timeouts, rate limits, and server errors use the 5-attempt schedule.
@@ -78,7 +78,7 @@ A trusted sender invites the agent while the service is running. The agent joins
 
 ### Edge Cases
 
-- The invite has no inviter, or the inviter id is not a valid Matrix user id. The agent does not join, and the invite stays listed as not trusted.
+- The invite has no inviter, or the inviter id is not a valid Matrix user id. The agent does not join. `list_invitations` shows `inviter: null` and `trusted: "false"`.
 - A display name or a user id part looks like a trusted id. Only an exact match of the full Matrix user id is trusted.
 - The join answer says the agent is already a member. This counts as success: no retry and no second greeting.
 - The inviter is added to the trusted set after the agent skipped the invite. The next pass joins the room and posts the greeting.
@@ -97,7 +97,7 @@ A trusted sender invites the agent while the service is running. The agent joins
 - **FR-004**: The system MUST compare the inviter by exact, full Matrix user id. Display names, user id parts, and domain patterns MUST NOT match.
 - **FR-005**: The system MUST NOT join an invite with a missing or malformed inviter.
 - **FR-006**: The system MUST NOT start a second join for a room while one join for that room is in progress.
-- **FR-007**: The system MUST retry a join that fails with a temporary error, for at most 5 attempts in total. Temporary errors are network errors, timeouts, rate limits, and server errors. The wait MUST start at 30 seconds, double each time, stop growing at 15 minutes, and include random jitter.
+- **FR-007**: The system MUST retry a join that fails with a temporary error, for at most 5 attempts in total. Temporary errors are network errors, timeouts, rate limits, and server errors. The wait MUST start at 30 seconds, double each time, stop growing at 15 minutes, and include jitter, as defined in the Assumptions.
 - **FR-007a**: A join that fails with a permanent error MUST NOT be retried. Permanent errors are HTTP 403 and 404, or the matching Matrix error codes. The room MUST stay in `list_invitations` with that error.
 - **FR-008**: The system MUST treat an "already a member" result as success.
 - **FR-009**: The system MUST post the 003 greeting once per room after an automatic join, whether the join happened at startup or at runtime.

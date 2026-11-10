@@ -53,7 +53,7 @@
 - **Principle X (Spec-Driven)**: This plan, `research.md`, `data-model.md`, `contracts/list-invitations.md`, and `quickstart.md` are the design.
 - **Naming (Development Workflow)**: Constitution v2.0.4 names MCP tools in snake_case. The registered names already match, because rmcp uses the method name (for example `join_room`). `spec/matrix-mcp-v1-v2.yml`, `README.md`, and `.cursor/rules/` still use kebab-case. **Amendment required**: rename every tool name in those files to the registered snake_case name (T002, T025, T026). The runtime names do not change, so Principle I stability holds. `list_invitations` follows the real convention.
 
-Gate result: PASS, with the three amendments above done in the first task of `tasks.md`.
+Gate result: PASS. T001 bumps the constitution to v2.1.0 and adds 004 to the roadmap. T002, T025, and T026 rename the remaining kebab-case tool names.
 
 Post-design re-check: PASS. The contract adds one read-only tool. The data model adds in-memory state only. No locked stack version changes.
 
@@ -88,7 +88,7 @@ tests/bot_invites.rs         # new: wiremock /sync rooms.invite + /join
 tests/server_tool_list_tests.rs  # tool list includes list_invitations
 spec/matrix-mcp-v1-v2.yml    # list_invitations contract
 .specify/memory/constitution.md  # v2.0.4 now; T001 bumps it to v2.1.0
-src/AGENTS.md                # DOX: invites.rs, list_invitations, startup order
+src/AGENTS.md                # DOX: invites.rs, list_invitations, startup order, snake_case tool names
 ```
 
 **Structure Decision**: One crate. The reconciler is a new module in `src/bot/`, beside `trusted.rs`. The registry type lives there and is shared with `src/mcp/server.rs` through `Arc`.

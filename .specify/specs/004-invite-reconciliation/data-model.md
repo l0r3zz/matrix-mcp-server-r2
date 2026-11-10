@@ -47,14 +47,26 @@ pub enum Decision {
 
 `decide(inviter: Option<&UserId>, trust: &TrustMemory) -> Decision` is pure and is compared by exact full user id (FR-004). An empty trusted set gives `SkipUntrusted` (fail-closed, FR-003).
 
+`list_invitations` maps a decision as follows. `Join` is `"trusted": "true"`. `SkipUntrusted` is `"trusted": "false"` with the inviter id. `SkipNoInviter` is `"trusted": "false"` and `inviter: null`. `"unknown"` is only for an inactive reconciler or a room that has not been decided yet.
+
 ## JoinError
 
 ```rust
+/// Leading space plus the parts that exist. Empty when both are absent.
+fn join_error_suffix(status: &Option<u16>, code: &Option<String>) -> String {
+    match (status, code.as_deref()) {
+        (Some(status), Some(code)) => format!(" {status} {code}"),
+        (Some(status), None) => format!(" {status}"),
+        (None, Some(code)) => format!(" {code}"),
+        (None, None) => String::new(),
+    }
+}
+
 /// Principle III: error types use thiserror.
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
-#[error("{class}{}", detail(.status, .code))]
+#[error("{class}{}", join_error_suffix(.status, .code))]
 pub struct JoinError {
-    pub class: ErrorClass,   // Permanent | Temporary
+    pub class: ErrorClass,   // Permanent | Temporary; Display is "permanent" or "temporary"
     pub status: Option<u16>, // HTTP status when known
     pub code: Option<String>, // Matrix errcode, for example "M_FORBIDDEN"
 }

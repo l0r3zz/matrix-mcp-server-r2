@@ -44,7 +44,7 @@ The result is one text content item that holds a JSON object. Other tools in `sr
 | `topic` | string or null | |
 | `inviter` | string or null | Null when `invite_details()` fails |
 | `encryption` | `"encrypted"`, `"unencrypted"`, or `"unknown"` | From `Room::encryption_state()` |
-| `trusted` | `"true"`, `"false"`, or `"unknown"` | `"unknown"` when the reconciler is not active (FR-011) or has not decided this room yet |
+| `trusted` | `"true"`, `"false"`, or `"unknown"` | `"true"` for `Join`. `"false"` for `SkipUntrusted` and for `SkipNoInviter`. `SkipNoInviter` also sets `inviter` to null. `"unknown"` when the reconciler is not active (FR-011) or has not decided this room yet |
 | `attempts` | integer | 0 when the bot is disabled |
 | `lastError` | string or null | `JoinError` display, never a server message body |
 
