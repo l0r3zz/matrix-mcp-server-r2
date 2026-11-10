@@ -104,3 +104,4 @@ The user chose to apply all findings. No task IDs changed.
 ## Next Actions
 
 1. Run `/speckit-implement`, starting with Phases 1 to 3 (the MVP).
+2. After `v0.4.0` ships, update the five agent-matrix docs listed in the tasks.md section "Deferred follow-up (after 004)". Tool names stay snake_case. Do not add kebab-case `name` attributes to the r2 tools.

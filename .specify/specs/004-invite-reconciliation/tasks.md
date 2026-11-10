@@ -206,3 +206,19 @@ Principle III applies to every task:
 2. **Second increment**: Phase 4 (US2). Untrusted and failed invites become visible, and an agent can join them with `join_room`.
 3. **Third increment**: Phase 5 (US3). Retry and the duplicate-join guard.
 4. **Release**: Phase 6, then the canary on `@agent0-2`, then the tag `v0.4.0` when the user asks.
+
+## Deferred follow-up (after 004)
+
+Do not do this work inside 004. Do it after `v0.4.0` ships.
+
+On 2026-11-09 the user confirmed that r2 tool names stay snake_case. The live `tools/list` on `@agent0-5` already returns snake_case names. rmcp names each tool after its Rust function.
+
+These agent-matrix docs still use the old TypeScript kebab-case names (`send-message`, `list-joined-rooms`, and the rest). No prompt or script there calls a tool by those names. Update them to snake_case after 004:
+
+- `multi-instance-deploy/docs/operations-manual.md`
+- `multi-instance-deploy/docs/agent-matrix-design.md`
+- `multi-instance-deploy/docs/theory-of-operations.md`
+- `multi-instance-deploy/docs/agent-matrix-users-guide.md`
+- `multi-instance-deploy/docs/plugin-architecture-research.md`
+
+Do not add `name = "kebab-case"` attributes to the r2 tools.
