@@ -50,6 +50,9 @@ pub enum Decision {
 ## JoinError
 
 ```rust
+/// Principle III: error types use thiserror.
+#[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
+#[error("{class}{}", detail(.status, .code))]
 pub struct JoinError {
     pub class: ErrorClass,   // Permanent | Temporary
     pub status: Option<u16>, // HTTP status when known
@@ -57,7 +60,7 @@ pub struct JoinError {
 }
 ```
 
-- The `Display` output is `"<class> <status> <code>"`, for example `permanent 403 M_FORBIDDEN`.
+- The `Display` output is `"<class> <status> <code>"`, for example `permanent 403 M_FORBIDDEN`. A missing part is left out, for example `temporary 502` or `temporary`. `ErrorClass` displays as `permanent` or `temporary`.
 - It never holds the server error message body, which may echo request data.
 
 ## State transitions per room

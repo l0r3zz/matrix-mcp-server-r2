@@ -33,9 +33,10 @@ cargo test --features e2ee
 2. From a trusted sender, create room A and invite `@agent0-2`.
 3. Start `run_mcp`.
 4. Wait for `/health` to report healthy.
-5. Expect a join of room A within 60 seconds.
-6. Expect exactly one greeting in room A.
-7. Expect one `decision=join` log line and one `join ok` line for room A.
+5. Check that the decision log line for room A has the real inviter, not a missing inviter. This confirms that Continuwuity sends the agent's own `m.room.member` event in the invite state.
+6. Expect a join of room A within 60 seconds.
+7. Expect exactly one greeting in room A.
+8. Expect one `decision=join` log line and one `join ok` line for room A.
 
 ## 3. Runtime invite (US3, SC-002)
 
@@ -71,4 +72,4 @@ This step is optional, for a lab agent only.
 
 1. Leave or decline rooms A, B, and C.
 2. Confirm `list_invitations` returns `{"count":0,"truncated":false,"invitations":[]}`.
-3. Record the results in `spec/T0NN-Agent0-2-Invite-Result-YYYYMMDD.md`.
+3. Record the results in `spec/T028-Agent0-2-Invite-Result-YYYYMMDD.md`.

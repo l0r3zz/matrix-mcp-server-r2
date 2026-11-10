@@ -12,7 +12,7 @@ There are no parameters. The tool reads the process's own Matrix user.
 
 ## Output
 
-The result is one text content item that holds a JSON object. Other tools in `src/mcp/server.rs` return text the same way.
+The result is one text content item that holds a JSON object. Other tools in `src/mcp/server.rs` return plain text lines. `list_invitations` is the first tool that returns JSON, so that a client can parse each field.
 
 ```json
 {

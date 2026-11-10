@@ -49,7 +49,7 @@ An agent or an operator asks which rooms the agent is invited to. The answer lis
 
 **Why this priority**: Without a list, an untrusted or failed invite cannot be seen at all. The agent cannot act on a room id it does not know.
 
-**Independent Test**: Invite the agent from a sender that is not trusted. Call `list_invitations`. Check that the room appears with the inviter and `trusted: false`. Call `join_room` with that room id, and check that the join works.
+**Independent Test**: Invite the agent from a sender that is not trusted. Call `list_invitations`. Check that the room appears with the inviter and `trusted: "false"`. Call `join_room` with that room id, and check that the join works.
 
 **Acceptance Scenarios**:
 
@@ -122,7 +122,7 @@ A trusted sender invites the agent while the service is running. The agent joins
 
 - **SC-001**: An invite from a trusted sender, sent while the service is stopped, is joined within 60 seconds after the service reports healthy. Exactly one greeting is posted.
 - **SC-002**: An invite from a trusted sender, sent while the service runs, is joined within 60 seconds. Exactly one greeting is posted.
-- **SC-003**: An invite from a sender that is not trusted is never joined automatically. It appears in `list_invitations` with `trusted: false`.
+- **SC-003**: An invite from a sender that is not trusted is never joined automatically. It appears in `list_invitations` with `trusted: "false"`. The `trusted` field is the string `"true"`, `"false"`, or `"unknown"`.
 - **SC-004**: A join that keeps failing with a temporary error makes at most 5 attempts. A join that fails with a permanent error makes 1 attempt. Both then appear in `list_invitations` with the last error.
 - **SC-005**: Over 20 background syncs with one pending trusted invite, the room gets at most one join request in progress at any time.
 - **SC-006**: All existing MCP tools still answer, and only `list_invitations` is added. Each agent's `/health` still reports `crossSigned` true after an encrypted-room join.
@@ -133,6 +133,7 @@ A trusted sender invites the agent while the service is running. The agent joins
 - The base is `main` at `v0.3.1`. The stale `matrix-sdk` 0.10 checkout at `/opt/agent-zero/matrix-mcp-server-r2` on g2s is not used.
 - The 003 trust contract stays as is. The input task's separate `MATRIX_AUTO_JOIN_INVITERS` allowlist is not adopted.
 - Retry state is kept in memory. After a restart, the startup check begins the attempts again from zero.
+- Retry jitter only spreads retries across agents and rooms. It does not need to be cryptographically random.
 - The tool surface grows from 20 + 2 to 21 + 2. The constitution and `spec/matrix-mcp-v1-v2.yml` are amended in this feature.
 - The release is `v0.4.0`, because it adds a tool and changes startup behavior.
 - Continuwuity stale-membership behavior and the decryption of messages sent before a join are out of scope.

@@ -15,6 +15,12 @@ No task hardcodes an instance number. Fixtures use `@agent0-5:example.com` and `
 
 Do not add a Cargo dependency. Do not open a second crypto store or start a second sync loop. Do not log tokens, recovery keys, `AMCTL_API_KEY`, or server error bodies.
 
+Principle III applies to every task:
+- Put a comment on each `.clone()`, including `Client` and `Arc` clones.
+- Error types use `thiserror`.
+- No `unwrap()` or `expect()` in production paths.
+- Every public item has a doc comment.
+
 ## Phase 1: Setup
 
 **Purpose**: Governance and contract updates, and the empty module.
@@ -23,8 +29,13 @@ Do not add a Cargo dependency. Do not open a second crypto store or start a seco
   - Change `20 + 2` to `21 + 2` on lines 8 and 118.
   - Add `004-invite-reconciliation` to the Principle IX roadmap.
   - Change the naming line (line 178) from `kebab-case` to `snake_case`, with the examples `list_joined_rooms`, `join_room`, `bootstrap_e2ee`, `get_encryption_status`, and `list_invitations`.
+  - Rename every tool name in the constitution text to the registered snake_case name: Principle I (lines 28 to 30, 35, and 41) and Principle II (lines 51 and 52). For example, `create-room` becomes `create_room`, and `send-direct-message` becomes `send_direct_message`.
+  - In the Sync Impact Report, say that the runtime names do not change. rmcp has always registered the method name, so this is a documentation fix, and Principle I stability holds.
   - Do not change the locked stack table.
-- [ ] T002 [P] Add `list_invitations` to `spec/matrix-mcp-v1-v2.yml` as a read (tier0) tool, with no input and the output from `contracts/list-invitations.md`. Change the tool count to `21 + 2`.
+- [ ] T002 [P] Update `spec/matrix-mcp-v1-v2.yml`:
+  - Rename every tool `name:` and every tool name in the descriptions to the registered snake_case name. Check each name against the `#[tool]` method names in `src/mcp/server.rs`.
+  - Add `list_invitations` as a read (tier0) tool, with no input and the output from `contracts/list-invitations.md`.
+  - Change the tool count to `21 + 2`.
 - [ ] T003 [P] Create `src/bot/invites.rs` with a module doc comment, and add `pub mod invites;` in `src/bot/mod.rs`. It compiles with and without `--features e2ee`.
 
 ## Phase 2: Foundational
@@ -36,7 +47,7 @@ Do not add a Cargo dependency. Do not open a second crypto store or start a seco
   - `InviteEntry` has `inviter: Option<OwnedUserId>`, `last_decision: Option<Decision>`, `attempts: u8`, `last_error: Option<JoinError>`, `next_attempt_at: Option<tokio::time::Instant>`, and `in_flight: bool`.
   - `Decision` is `Join`, `SkipUntrusted`, or `SkipNoInviter`.
   - `ErrorClass` is `Permanent` or `Temporary`.
-  - `JoinError` has `class`, `status: Option<u16>`, and `code: Option<String>`. Its `Display` output is `"<class> <status> <code>"`, for example `permanent 403 M_FORBIDDEN`. It "never holds the server error message body".
+  - `JoinError` has `class`, `status: Option<u16>`, and `code: Option<String>`. It derives `thiserror::Error` (Principle III). Its `Display` output is `"<class> <status> <code>"`, for example `permanent 403 M_FORBIDDEN`, and a missing part is left out. It "never holds the server error message body".
 - [ ] T005 Change `start_background_sync` in `src/matrix/client.rs` to `start_background_sync(client, after_sync: Option<Arc<tokio::sync::Notify>>)`. After each `Ok` from `sync_once`, call `notify_one()`. The error path and the sleeps stay the same.
 - [ ] T006 [P] Add `MatrixMcpServer::with_invites(self, Arc<InviteRegistry>) -> Self` in `src/mcp/server.rs`. Store an `Arc<InviteRegistry>` field, and default it to an empty, inactive registry in `new()`. Keep the signature of `MatrixMcpServer::new(client, config)`.
 - [ ] T007 In `src/main.rs`, create one `Arc<InviteRegistry>` and one `Arc<Notify>` whether `BOT_ENABLED` is set or not. Pass the registry to the MCP service factory with `with_invites`. Pass `Some(notify)` to `start_background_sync`.
@@ -57,7 +68,7 @@ Do not add a Cargo dependency. Do not open a second crypto store or start a seco
   - An inviter of `None` gives `SkipNoInviter` (FR-005).
   - An empty set gives `SkipUntrusted`.
   - `should_log(prev, new)` is true only when the decision changes (FR-014).
-- [ ] T009 [P] [US1] Add `tests/bot_invites.rs` with wiremock. Use a `/_matrix/client/v3/sync` response whose `rooms.invite` has a stripped `m.room.member` event with `membership: invite`, `state_key` set to the session user, and `sender` set to the inviter. Cover these cases:
+- [ ] T009 [P] [US1] Add `tests/bot_invites.rs` with wiremock. Use a `/_matrix/client/v3/sync` response whose `rooms.invite` has a stripped `m.room.member` event with `membership: invite`, `state_key` set to the session user, and `sender` set to the inviter. Model the `invite_state` on a real Continuwuity invite: `m.room.create`, `m.room.name`, `m.room.join_rules`, the inviter's `m.room.member`, and the invitee's `m.room.member`. Cover these cases:
   - A trusted inviter gives exactly one `POST /_matrix/client/v3/join/{roomId}` and one greeting `PUT .../send/m.room.message/...`.
   - An untrusted inviter gives zero join requests.
   - No invites give zero `GET /api/v1/trusted-senders` requests (FR-003).
@@ -100,7 +111,7 @@ Do not add a Cargo dependency. Do not open a second crypto store or start a seco
   - Check `roomId`, `name`, `canonicalAlias`, `topic`, `inviter`, and `encryption`.
   - Check `trusted: "unknown"` and `attempts: 0` with an inactive registry (FR-011).
   - Check that the output does not contain the test access token string (FR-012).
-- [ ] T016 [P] [US2] In `tests/server_tool_list_tests.rs`, assert that the tool router lists `list_invitations`, and that the count is one more than `v0.3.1` in each feature build.
+- [ ] T016 [P] [US2] In `tests/server_tool_list_tests.rs`, assert that the tool router lists `list_invitations`, and that it lists exactly 22 tools (21 + 2) in both feature builds. Both E2EE tools are registered without the `e2ee` feature (Principle II).
 
 ### Implementation for User Story 2
 
@@ -130,12 +141,18 @@ Do not add a Cargo dependency. Do not open a second crypto store or start a seco
   - `classify()` gives `Temporary` for 429, `M_LIMIT_EXCEEDED`, 5xx, and errors with no client API body.
   - With the default policy, `backoff(n)` is within 20 percent of 30 s, 60 s, 120 s, and 240 s for n = 1 to 4. It never exceeds 18 minutes for large n, which is 15 minutes times 1.2.
   - No attempt is due after 5 attempts or after a `Permanent` error.
+  - Aborting the reconciler handle while it waits in `sleep_until` makes the handle finish within 1 second (FR-017).
 - [ ] T020 [P] [US3] Extend `tests/bot_invites.rs` with a test `RetryPolicy { base: 10ms, cap: 50ms, max_attempts: 5 }`:
   - A 502 then a 200 give 2 join requests and 1 greeting.
   - Five 502 responses give exactly 5 join requests.
   - A 403 gives 1 request.
   - A join answer with a 2-second delay, while 20 notifications are sent, never has 2 join requests in progress for the room (SC-005).
   - An invite that is gone from the next `/sync` is pruned from the registry.
+  - After five 502 responses, `list_invitations` shows the room with `"trusted": "true"`, `"attempts": 5`, and `"lastError": "temporary 502"` (US2 scenario 3, SC-004).
+  - After one 403, `list_invitations` shows `"attempts": 1` and `"lastError": "permanent 403 M_FORBIDDEN"` (FR-007a).
+  - With the bot on, an untrusted invite shows `"trusted": "false"` and `"attempts": 0` (SC-003).
+  - Already a member: the join returns 200, and the next `/sync` lists the room as joined. Expect one greeting and no second join request (FR-008).
+  - Capture `tracing` output with a test writer. Check that the decision lines have `room_id`, `inviter`, and `decision`. Check that a repeated decision is not logged again. Check that no line holds the test access token or the test `AMCTL_API_KEY` (FR-014).
 
 ### Implementation for User Story 3
 
@@ -153,10 +170,18 @@ Do not add a Cargo dependency. Do not open a second crypto store or start a seco
 
 ## Phase 6: Polish and Release
 
-- [ ] T025 [P] Update `src/AGENTS.md`: add `src/bot/invites.rs`, the new startup order (attach, reconciler, then background sync), `list_invitations`, and the `21 + 2` tool count. Update the root `AGENTS.md` and `.cursor/rules/project-context.mdc` to `21 + 2`.
-- [ ] T026 [P] Update `README.md` with `list_invitations` and the automatic-join behavior. Bump `version` in `Cargo.toml` to `0.4.0`, and refresh `Cargo.lock`.
+- [ ] T025 [P] Update `src/AGENTS.md`:
+  - Add `src/bot/invites.rs`, the new startup order (attach, reconciler, then background sync), `list_invitations`, and the `21 + 2` tool count.
+  - Say that the 004 reconciler replaces the 003 invite event handler. Leave `.specify/specs/003-integrated-matrix-bot/` unchanged as the 003 record.
+  - Update the root `AGENTS.md` to `21 + 2`.
+  - In `.cursor/rules/project-context.mdc`, `.cursor/rules/rust-e2ee.mdc`, and `.cursor/rules/mcp-tools.mdc`, change the tool count to `21 + 2`, and rename every tool name to snake_case.
+- [ ] T026 [P] Update `README.md`:
+  - Rename the tool names in the tool parity table to snake_case.
+  - Add `list_invitations` and the automatic-join behavior.
+  - Change the tool counts.
+  - Bump `version` in `Cargo.toml` to `0.4.0`, and refresh `Cargo.lock`.
 - [ ] T027 Run `cargo fmt --all --check`, `cargo clippy --all-targets -- -D warnings`, `cargo clippy --all-targets --features e2ee -- -D warnings`, `cargo test`, and `cargo test --features e2ee`.
-- [ ] T028 Run the `@agent0-2` canary in `quickstart.md` only after the user approves the deploy. Record the result in `spec/T0NN-Agent0-2-Invite-Result-YYYYMMDD.md`. Do not upgrade any other agent, tag, or push until the user asks.
+- [ ] T028 Run the `@agent0-2` canary in `quickstart.md` only after the user approves the deploy. Record the result in `spec/T028-Agent0-2-Invite-Result-YYYYMMDD.md`. Do not upgrade any other agent, tag, or push until the user asks.
 
 ## Dependencies
 
