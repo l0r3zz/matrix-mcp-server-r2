@@ -2,17 +2,17 @@ spec:
   name: matrix-mcp-server-r2
   version: "2.0.0"
   summary: >
-    Unified Matrix MCP gateway for the Agent-Matrix fleet. Exposes 20 operational
+    Unified Matrix MCP gateway for the Agent-Matrix fleet. Exposes 21 operational
     Matrix tools that transparently support Cross-Signed E2EE by default (with
     automatic pre-flight /keys/query fallback to unencrypted rooms when an
     invitee lacks cross-signed E2EE keys), plus 2 E2EE management/diagnostic
-    tools (bootstrap-e2ee and get-encryption-status).
+    tools (bootstrap_e2ee and get_encryption_status).
 
   goals:
     - Provide seamless E2EE-by-default on the existing 20 MCP tool names so external clients require zero tool-name changes.
-    - Default create-room and send-direct-message to encryptionMode="auto" (pre-flight /keys/query enables E2EE when invitees have cross-signed keys, and falls back to an unencrypted room when an invitee lacks E2EE keys).
-    - Handle encrypted and unencrypted rooms transparently in send-message, get-room-messages, get-messages-by-date, and identify-active-users.
-    - Automatically bootstrap device keys and cross-signing at server startup when E2EE_ENABLED=true, while exposing bootstrap-e2ee and get-encryption-status for explicit operator control.
+    - Default create_room and send_direct_message to encryptionMode="auto" (pre-flight /keys/query enables E2EE when invitees have cross-signed keys, and falls back to an unencrypted room when an invitee lacks E2EE keys).
+    - Handle encrypted and unencrypted rooms transparently in send_message, get_room_messages, get_messages_by_date, and identify_active_users.
+    - Automatically bootstrap device keys and cross-signing at server startup when E2EE_ENABLED=true, while exposing bootstrap_e2ee and get_encryption_status for explicit operator control.
     - Serve as the single Matrix client and SQLite crypto store owner per agent container (supporting Stage 2 absorption of matrix-bot into src/bot/).
 
   non_goals:
@@ -40,7 +40,7 @@ concepts:
 
   EncryptionMode:
     description: >
-      How room creation encryption should be handled in create-room and send-direct-message.
+      How room creation encryption should be handled in create_room and send_direct_message.
       "auto" = Pre-flight query /_matrix/client/v3/keys/query for invitees; create an encrypted
                room if all invitees have cross-signed E2EE keys (or no invitees are specified),
                or automatically fall back to an unencrypted room if an invitee lacks E2EE keys
@@ -110,14 +110,14 @@ concepts:
 apis:
   unified:
     description: >
-      Unified 20+2 MCP tool surface. All 20 operational tools transparently handle both
+      Unified 21+2 MCP tool surface. All 21 operational tools transparently handle both
       encrypted and unencrypted rooms. Key E2EE-enhanced and E2EE-specific tools are
       specified below.
 
     tools:
 
-      create-room:
-        name: create-room
+      create_room:
+        name: create_room
         summary: Create a new Matrix room (encrypted by default with automatic pre-flight capability fallback).
         request:
           type: object
@@ -151,8 +151,8 @@ apis:
           - In "e2ee" mode, if any invitee lacks cross-signed E2EE keys, return TrustPolicyNotSatisfiedError.
           - If encryption is requested and bootstrap is incomplete, return CryptoNotBootstrappedError.
 
-      send-direct-message:
-        name: send-direct-message
+      send_direct_message:
+        name: send_direct_message
         summary: Send a direct message to a user, creating a new DM room (with encryptionMode="auto" by default) if none exists.
         request:
           type: object
@@ -170,8 +170,8 @@ apis:
             encrypted: { type: boolean }
             created: { type: boolean }
 
-      send-message:
-        name: send-message
+      send_message:
+        name: send_message
         summary: Send a message to a Matrix room (automatically encrypts via Megolm for cross-signed devices if the room is encrypted, or sends plaintext if unencrypted).
         request:
           type: object
@@ -195,8 +195,8 @@ apis:
           - If the room is encrypted and E2EE bootstrap is incomplete, return CryptoNotBootstrappedError.
           - Outbound room keys are withheld (m.unverified) from any member device that is not cross-signed.
 
-      get-room-messages:
-        name: get-room-messages
+      get_room_messages:
+        name: get_room_messages
         summary: Retrieve recent messages from a Matrix room (automatically decrypting encrypted events when keys are present and marking undecryptable events).
         request:
           type: object
@@ -223,8 +223,8 @@ apis:
         error_behavior:
           - If an encrypted event is missing its Megolm key, do not panic; include the message with decryptionState="missing_key" and body marker "[Encrypted message - unable to decrypt (missing_key)]".
 
-      bootstrap-e2ee:
-        name: bootstrap-e2ee
+      bootstrap_e2ee:
+        name: bootstrap_e2ee
         summary: >
           Initialize or verify E2EE state for this MCP device, including device key upload,
           Secret Storage unlock, and cross-signing verification. Also runs automatically at
@@ -281,8 +281,8 @@ apis:
           - If an identity already exists on the homeserver and no recovery secret resolves, return IdentityExistsError.
           - If creating an identity requires UIAA and MATRIX_UIAA_PASSWORD_FILE is unset or unreadable, return UiaaRequiredError.
 
-      get-encryption-status:
-        name: get-encryption-status
+      get_encryption_status:
+        name: get_encryption_status
         summary: Report room and device E2EE readiness, cross-signing state, and crypto store health.
         request:
           type: object
@@ -319,17 +319,63 @@ apis:
             notes:
               type: string
 
+
+      list_invitations:
+        name: list_invitations
+        summary: List pending room invites for this agent. The tool does not join or decline.
+        request:
+          type: object
+          properties: {}
+        response:
+          type: object
+          properties:
+            count:
+              type: integer
+            truncated:
+              type: boolean
+            invitations:
+              type: array
+              maxItems: 100
+              items:
+                type: object
+                properties:
+                  roomId:
+                    type: string
+                  name:
+                    type: string
+                    nullable: true
+                  canonicalAlias:
+                    type: string
+                    nullable: true
+                  topic:
+                    type: string
+                    nullable: true
+                  inviter:
+                    type: string
+                    nullable: true
+                  encryption:
+                    type: string
+                    enum: ["encrypted", "unencrypted", "unknown"]
+                  trusted:
+                    type: string
+                    enum: ["true", "false", "unknown"]
+                  attempts:
+                    type: integer
+                  lastError:
+                    type: string
+                    nullable: true
+
 tests:
   unencrypted_and_fallback:
     description: >
-      - Unencrypted rooms (e.g., Fleet HQ Clean) continue to work with send-message and get-room-messages.
-      - create-room with encryptionMode="auto" falls back to an unencrypted room when /keys/query shows an invitee has no cross-signed E2EE keys, and fails closed on network errors.
+      - Unencrypted rooms (e.g., Fleet HQ Clean) continue to work with send_message and get_room_messages.
+      - create_room with encryptionMode="auto" falls back to an unencrypted room when /keys/query shows an invitee has no cross-signed E2EE keys, and fails closed on network errors.
 
   cross_signed_e2ee:
     description: >
       - Startup auto-bootstrap unlocks Secret Storage (or creates cross-signing on a fresh account and writes a 0600 recovery-key file).
-      - create-room with encryptionMode="auto" creates an encrypted room when invitees are cross-signed (or when no invitees are specified).
-      - send-message and get-room-messages transparently encrypt and decrypt in encrypted rooms.
+      - create_room with encryptionMode="auto" creates an encrypted room when invitees are cross-signed (or when no invitees are specified).
+      - send_message and get_room_messages transparently encrypt and decrypt in encrypted rooms.
       - After MCP restart or host migration with restored crypto store, previously encrypted room messages remain decryptable.
       - A device that is not cross-signed does not receive room keys (m.unverified).
       - Acceptance homeserver is Continuwuity; first gate is an encrypted group room round-trip with Element.

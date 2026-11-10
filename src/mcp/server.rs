@@ -28,6 +28,21 @@ fn err_text(text: impl Into<String>) -> CallToolResult {
     CallToolResult::error(vec![Content::text(text)])
 }
 
+fn invitation_name(room: &matrix_sdk::Room) -> Option<String> {
+    if let Some(name) = room.name().filter(|name| !name.trim().is_empty()) {
+        return Some(name);
+    }
+    room.cached_display_name().map(|name| name.to_string())
+}
+
+fn invitation_encryption(room: &matrix_sdk::Room) -> &'static str {
+    match room.encryption_state() {
+        matrix_sdk::EncryptionState::Encrypted => "encrypted",
+        matrix_sdk::EncryptionState::NotEncrypted => "unencrypted",
+        matrix_sdk::EncryptionState::Unknown => "unknown",
+    }
+}
+
 // ---------------------------------------------------------------------------
 // Tool input structs
 // ---------------------------------------------------------------------------
@@ -234,6 +249,8 @@ pub struct SetRoomTopicInput {
 pub struct MatrixMcpServer {
     client: Client,
     config: Arc<Config>,
+    /// Shared with the reconciler. `list_invitations` reads it.
+    invites: Arc<crate::bot::invites::InviteRegistry>,
     #[allow(dead_code)]
     tool_router: ToolRouter<Self>,
 }
@@ -244,8 +261,26 @@ impl MatrixMcpServer {
         Self {
             client,
             config,
+            invites: Arc::new(crate::bot::invites::InviteRegistry::new()),
             tool_router,
         }
+    }
+
+    /// Names registered by the tool router.
+    #[allow(dead_code)] // `tests/server_tool_list_tests.rs` reads the library copy.
+    pub fn registered_tool_names(&self) -> Vec<String> {
+        self.tool_router
+            .list_all()
+            .into_iter()
+            .map(|tool| tool.name.into_owned())
+            .collect()
+    }
+
+    /// Use the process invite registry. The default registry is empty and inactive.
+    pub fn with_invites(mut self, registry: Arc<crate::bot::invites::InviteRegistry>) -> Self {
+        // The server and the reconciler share one registry.
+        self.invites = registry;
+        self
     }
 
     fn get_room(&self, room_id: &str) -> std::result::Result<matrix_sdk::Room, CallToolResult> {
@@ -581,6 +616,50 @@ impl MatrixMcpServer {
             ));
         }
         Ok(text_result(texts))
+    }
+
+    #[tool(
+        description = "List pending Matrix room invitations, including the inviter, trust, and the last join error"
+    )]
+    pub async fn list_invitations(&self) -> Result<CallToolResult, McpError> {
+        let snapshot = self.invites.snapshot().await;
+        let active = self.invites.is_active();
+        let mut views = Vec::new();
+        for room in self.client.invited_rooms() {
+            let room_id = room.room_id().to_owned();
+            let entry = snapshot.get(&room_id);
+            let decision = if active {
+                entry.and_then(|entry| entry.last_decision)
+            } else {
+                None
+            };
+            let (attempts, last_error) = if active {
+                (
+                    entry.map(|entry| entry.attempts).unwrap_or(0),
+                    entry
+                        .and_then(|entry| entry.last_error.as_ref().map(|error| error.to_string())),
+                )
+            } else {
+                (0, None)
+            };
+            views.push(crate::bot::invites::InvitationView {
+                room_id: room_id.to_string(),
+                name: invitation_name(&room),
+                canonical_alias: room.canonical_alias().map(|alias| alias.to_string()),
+                topic: room.topic(),
+                inviter: match room.invite_details().await {
+                    Ok(details) => Some(details.inviter_id.to_string()),
+                    Err(_) => None,
+                },
+                encryption: invitation_encryption(&room).to_string(),
+                decision,
+                attempts,
+                last_error,
+            });
+        }
+        let body = serde_json::to_string(&crate::bot::invites::render_invitations(views))
+            .unwrap_or_else(|_| "{\"count\":0,\"truncated\":false,\"invitations\":[]}".to_string());
+        Ok(single_text(body))
     }
 
     #[tool(

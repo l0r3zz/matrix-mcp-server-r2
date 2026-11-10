@@ -37,6 +37,7 @@ impl TrustMemory {
 }
 
 /// What to do with one invite after the trusted set is current.
+#[allow(dead_code)] // `tests/bot_trusted.rs` still covers this decision.
 #[derive(Debug, PartialEq, Eq)]
 pub enum InviteAction {
     Join,
@@ -44,6 +45,7 @@ pub enum InviteAction {
 }
 
 /// `Join` only when the inviter is in the set.
+#[allow(dead_code)] // `tests/bot_trusted.rs` still covers this decision.
 pub fn invite_action(memory: &TrustMemory, sender: &str) -> InviteAction {
     if memory.admits(sender) {
         InviteAction::Join

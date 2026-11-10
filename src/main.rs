@@ -56,7 +56,11 @@ async fn main() -> Result<(), AppError> {
     config.validate()?;
     info!("Configuration loaded successfully");
 
-    let (client, sync_handle, cleanup_handle, _store_lock) = if config.skip_matrix_init {
+    let registry = Arc::new(bot::invites::InviteRegistry::new());
+    let after_sync = Arc::new(tokio::sync::Notify::new());
+    let (client, sync_handle, cleanup_handle, reconciler_handle, _store_lock) = if config
+        .skip_matrix_init
+    {
         info!("SKIP_MATRIX_INIT is set -- starting without Matrix connection");
         info!("Tools will return errors; use this mode for MCP protocol testing only");
         let client = matrix_sdk::Client::builder()
@@ -66,7 +70,7 @@ async fn main() -> Result<(), AppError> {
             .map_err(|e| AppError::MatrixClient(format!("Failed to build stub client: {}", e)))?;
         let sync_handle = tokio::spawn(async {});
         let cleanup_handle = tokio::spawn(async {});
-        (client, sync_handle, cleanup_handle, None)
+        (client, sync_handle, cleanup_handle, None, None)
     } else {
         let (store_path, recovery_key_file, uiaa_password_file) = if config.e2ee_enabled {
             (
@@ -96,10 +100,11 @@ async fn main() -> Result<(), AppError> {
         )
         .await?;
         let client = initialized.client;
-        if config.bot_enabled {
+        let reconciler_handle = if config.bot_enabled {
             bot::attach(
                 &client,
                 &bot::Session {
+                    // The session owns its own copy of the process config.
                     user_id: config.matrix_user_id.clone(),
                     display_name: config.bot_display_name.clone(),
                     identity: config.agent_identity.clone(),
@@ -110,9 +115,25 @@ async fn main() -> Result<(), AppError> {
                     trusted_senders: config.trusted_senders.clone(),
                 },
             )
-            .await;
-        }
-        let sync_handle = matrix::client::start_background_sync(client.clone());
+            .await
+            .map(|runtime| {
+                bot::invites::spawn_reconciler(
+                    // The reconciler shares this client. The clone does not open a store.
+                    client.clone(),
+                    runtime,
+                    Arc::clone(&registry),
+                    Arc::clone(&after_sync),
+                    bot::invites::RetryPolicy::default(),
+                )
+            })
+        } else {
+            None
+        };
+        let sync_handle = matrix::client::start_background_sync(
+            // The sync loop shares this client. The clone does not open a store.
+            client.clone(),
+            Some(Arc::clone(&after_sync)),
+        );
         let cache = matrix::ClientCache::new();
         let cleanup_handle = cache.start_cleanup_task();
         cache
@@ -122,7 +143,13 @@ async fn main() -> Result<(), AppError> {
                 client.clone(),
             )
             .await;
-        (client, sync_handle, cleanup_handle, initialized.store_lock)
+        (
+            client,
+            sync_handle,
+            cleanup_handle,
+            reconciler_handle,
+            initialized.store_lock,
+        )
     };
 
     let port = config.port;
@@ -136,12 +163,14 @@ async fn main() -> Result<(), AppError> {
 
     let server_client = client.clone();
     let server_config = config.clone();
+    // Each MCP session shares the process invite registry.
+    let server_registry = Arc::clone(&registry);
     let mcp_service: StreamableHttpService<MatrixMcpServer> = StreamableHttpService::new(
         move || {
-            Ok(MatrixMcpServer::new(
-                server_client.clone(),
-                server_config.clone(),
-            ))
+            Ok(
+                MatrixMcpServer::new(server_client.clone(), server_config.clone())
+                    .with_invites(Arc::clone(&server_registry)),
+            )
         },
         LocalSessionManager::default().into(),
         StreamableHttpServerConfig::default(),
@@ -209,6 +238,9 @@ async fn main() -> Result<(), AppError> {
             info!("Shutdown signal received");
             sync_handle.abort();
             cleanup_handle.abort();
+            if let Some(reconciler_handle) = reconciler_handle {
+                reconciler_handle.abort();
+            }
         })
         .await
         .map_err(|e| AppError::Unknown(format!("Server error: {}", e)))?;

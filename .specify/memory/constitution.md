@@ -5,7 +5,7 @@ in the Agent-Matrix fleet. It connects to the agent's Continuwuity homeserver
 using a single `matrix-sdk` 0.19 client and a single persistent SQLite crypto
 store per agent container, serving:
 
-1. **Proactive MCP Tools (`/mcp`)**: A unified `20 + 2` tool surface where the
+1. **Proactive MCP Tools (`/mcp`)**: A unified `21 + 2` tool surface where the
    20 existing tool names transparently support Cross-Signed E2EE by default
    (with automatic pre-flight `/keys/query` fallback to unencrypted rooms when
    an invitee lacks cross-signed E2EE keys), plus `bootstrap_e2ee` and
@@ -115,10 +115,12 @@ those cases).
 Features MUST be delivered incrementally per the roadmap phases:
 1. `002-e2ee-cross-signing`: `matrix-sdk` 0.19 migration, persistent SQLite
    crypto store, automatic startup cross-signing bootstrap, and Unified
-   E2EE-By-Default MCP tools (`20 + 2`).
+   E2EE-By-Default MCP tools (`21 + 2`).
 2. `003-integrated-matrix-bot`: Absorb `matrix-bot-rust` reactive `/sync` ->
    Agent Zero `/api/api_message` dispatch into `src/bot/` inside
    `matrix-mcp-server-r2`, retiring the separate `matrix-bot` process.
+3. `004-invite-reconciliation`: Reconcile pending invites after startup and
+   after each successful sync, and add the read-only `list_invitations` tool.
 Each increment MUST be independently deployable and testable.
 
 ### X. Spec-Driven Development
@@ -162,10 +164,10 @@ src/
     client.rs          -- matrix-sdk 0.19 client, SQLite store, auto-bootstrap, sync loop
     cache.rs           -- TTL-based client cache
   mcp/
-    server.rs          -- MatrixMcpServer: 20 unified tools + bootstrap_e2ee & get_encryption_status
+    server.rs          -- MatrixMcpServer: 21 unified tools + bootstrap_e2ee & get_encryption_status
   bot/                 -- (Stage 2 / 003) Reactive sync dispatcher to Agent Zero /api/api_message
 spec/
-  matrix-mcp-v1-v2.yml -- Unified API contract (20 operational tools + 2 E2EE management tools)
+  matrix-mcp-v1-v2.yml -- Unified API contract (21 operational tools + 2 E2EE management tools)
 .specify/
   feature.json         -- Active Spec Kit feature directory pointer
   memory/              -- Constitution and project knowledge
@@ -175,7 +177,7 @@ spec/
 
 Naming:
 
-- MCP tools: `snake_case`, the Rust method name that rmcp registers (for example, `list_joined_rooms`, `create_room`, `send_message`, `bootstrap_e2ee`, `get_encryption_status`). Do not set a kebab-case `name` attribute. Do not add `-r2` suffixes.
+- MCP tools: `snake_case`, the Rust method name that rmcp registers (for example, `list_joined_rooms`, `create_room`, `send_message`, `bootstrap_e2ee`, `get_encryption_status`, `list_invitations`). Do not set a kebab-case `name` attribute. Do not add `-r2` suffixes.
 - Tool JSON inputs: `camelCase` via `#[serde(rename = "...")]` (with `alias` for `snake_case` where helpful).
 - Rust modules: `snake_case`
 - Environment variables: `SCREAMING_SNAKE_CASE`
@@ -226,6 +228,8 @@ Compliance review: a change that touches tool contracts, crypto, or the
 implementation. A locked stack version MUST NOT change inside a feature
 spec. That change requires an amendment here first.
 
-**Version**: 2.0.4 | **Ratified**: 2026-05-11 | **Last Amended**: 2026-11-09
+**Version**: 2.1.0 | **Ratified**: 2026-05-11 | **Last Amended**: 2026-11-09
 
-Amendment 2.0.4 (PATCH): tool names in this file now use the registered snake_case names. The runtime names did not change. `20 + 2` stays until `list_invitations` ships. That growth is a later MINOR bump.
+Amendment 2.0.4 (PATCH): tool names in this file now use the registered snake_case names. The runtime names did not change.
+
+Amendment 2.1.0 (MINOR): the tool surface is `21 + 2`. `004-invite-reconciliation` is on the roadmap. `list_invitations` is a naming example. The locked stack table did not change. The 20 existing tool names stay stable.

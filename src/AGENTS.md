@@ -58,17 +58,18 @@ src/
     secrets.rs         -- recovery-secret resolution
     cache.rs           -- TTL client cache (15-min TTL, periodic cleanup)
   mcp/
-    server.rs          -- MatrixMcpServer: #[tool_router], 22 #[tool] methods
+    server.rs          -- MatrixMcpServer: #[tool_router], 23 #[tool] methods, including list_invitations
   bot/
     mod.rs             -- Register the message handler on the shared client when BOT_ENABLED=true.
     trigger.rs         -- Prefixes from the session user id, and the decision order.
     dispatch.rs        -- Fast replies and one Agent Zero reply via room.send.
     agent_zero.rs      -- POST /api/api_message, key re-read on HTTP 401, one fresh-context retry on an exact `404 Context not found`, HTML chunks.
-    trusted.rs         -- GET trusted-senders, join only a trusted invite, greet once.
+    trusted.rs         -- GET trusted-senders. The reconciler uses this set.
+    invites.rs         -- Reconcile pending invites after startup and after each sync.
     state.rs           -- room_contexts.json and processed_event_ids.json. No sync cursor.
 tests/
   config_tests.rs, cache_tests.rs, integration_tests.rs, health_tests.rs,
-  server_tool_list_tests.rs, e2ee_tests.rs (`e2ee` feature)
+  server_tool_list_tests.rs, e2ee_tests.rs (`e2ee` feature), bot_invites.rs
 spec/
   matrix-mcp-v1-v2.yml              -- v1/v2 API spec
   E2EE-Prep-Checklist-for-Rust-MCP-Server.md
@@ -114,7 +115,7 @@ OAuth/HTTPS env vars exist in config.rs but are partially implemented. The crypt
 - **Room encryption**: `create-room` and `send-direct-message` take optional `encryptionMode` (`auto`, `e2ee`, `none`). When E2EE is active, omitted means `auto`: `/keys/query` runs before the room is created. All invitees cross-signed, or no invitees, sets `m.room.encryption` and history visibility `invited`. Do not use `joined`: Continuwuity then refuses federation `/event` for messages sent before an invitee joins, and the invitee's Synapse join never completes. An invitee without keys falls back to an unencrypted room in `auto` (`Encrypted: No (fallback: @user:domain has no cross-signed E2EE keys)`) and returns `TrustPolicyNotSatisfiedError` in `e2ee`. A keys-query failure does not create the room. `none` stays unencrypted
 - **Messages**: `send-message` reports `Encrypted: Yes` or `Encrypted: No`. Readers keep unable-to-decrypt events as `[Encrypted message - unable to decrypt (missing_key)]`. An encrypted send while E2EE is inactive returns `CryptoNotBootstrappedError`
 - **Status**: `get-encryption-status` reports device, store, trust, and optional room encryption. `GET /health` always includes `e2ee`, `crossSigned`, and `botEnabled`. The crypto flags are false when the `e2ee` feature, `E2EE_ENABLED`, or `SKIP_MATRIX_INIT` keeps crypto off. `botEnabled` is true only when `BOT_ENABLED=true` and the dispatcher handlers were registered. A binary without the feature returns `E2EE support not enabled; rebuild with --features e2ee` from the two E2EE tools
-- **Bot foundation**: `src/bot/` uses the client from `src/matrix/client.rs` only when `BOT_ENABLED=true`. It does not open `CRYPTO_STORE_PATH` or start a second sync. The message handler and the invite handler are registered before that sync. Fast replies (`ping`, `hello`, `whoami`) go out with `room.send()` and do not call Agent Zero. A question is posted to `A0_API_URL` on its own task. The reply is HTML from `pulldown-cmark`, sent once from `src/bot/` in chunks of at most 4000 characters. An invite joins only when `GET {AMCTL_URL}/api/v1/trusted-senders` names the inviter, or when that lookup fails and `TRUSTED_SENDERS` fills an empty set. The greeting is sent once. Encrypted events are decrypted only in a build with `--features e2ee`. State files are `room_contexts.json` and `processed_event_ids.json` under `BOT_STATE_DIR`. The Agent Zero key is `{BOT_STATE_DIR}/.a0-api-key` and is never logged. `AMCTL_API_KEY` is never logged. `sync_cursor.json` is not used
+- **Bot foundation**: `src/bot/` uses the client from `src/matrix/client.rs` only when `BOT_ENABLED=true`. It does not open `CRYPTO_STORE_PATH` or start a second sync. The message handler is registered before background sync. `invites.rs` then joins a trusted pending invite. A temporary join failure retries at most 5 times. `list_invitations` reads the pending invites and does not join. The old invite event handler no longer joins. Fast replies (`ping`, `hello`, `whoami`) go out with `room.send()` and do not call Agent Zero. A question is posted to `A0_API_URL` on its own task. The reply is HTML from `pulldown-cmark`, sent once from `src/bot/` in chunks of at most 4000 characters. An invite joins only when `GET {AMCTL_URL}/api/v1/trusted-senders` names the inviter, or when that lookup fails and `TRUSTED_SENDERS` fills an empty set. The greeting is sent once. Encrypted events are decrypted only in a build with `--features e2ee`. State files are `room_contexts.json` and `processed_event_ids.json` under `BOT_STATE_DIR`. The Agent Zero key is `{BOT_STATE_DIR}/.a0-api-key` and is never logged. `AMCTL_API_KEY` is never logged. `sync_cursor.json` is not used
 - **Tool macros**: `#[tool_router]` + `#[tool]` on impl blocks; camelCase JSON via serde rename
 - **No OAuth yet**: Config fields exist but auth.rs is minimal -- OAuth is planned, not implemented
 - **Release profile**: LTO + strip + codegen-units=1 for small/fast binary

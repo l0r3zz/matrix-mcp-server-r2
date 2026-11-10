@@ -6,17 +6,18 @@
 
 pub mod agent_zero;
 mod dispatch;
+pub mod invites;
 mod state;
 mod trigger;
 pub mod trusted;
+
+pub use dispatch::Runtime;
 
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 
-use dispatch::Runtime;
-
-/// Set when invite and message handlers are registered.
+/// Set when the message handlers are registered.
 static HANDLERS_REGISTERED: AtomicBool = AtomicBool::new(false);
 
 /// Whether the dispatcher handlers are registered.
@@ -45,7 +46,7 @@ pub struct Session {
 /// Call this only when `BOT_ENABLED=true`, and call it before
 /// `start_background_sync`. A homeserver rejection of the display name is
 /// logged and does not stop the process. This does not open `CRYPTO_STORE_PATH`.
-pub async fn attach(client: &matrix_sdk::Client, session: &Session) {
+pub async fn attach(client: &matrix_sdk::Client, session: &Session) -> Option<Arc<Runtime>> {
     let name = session.display_name.trim();
     if !name.is_empty() {
         if let Err(error) = client.account().set_display_name(Some(name)).await {
@@ -58,10 +59,11 @@ pub async fn attach(client: &matrix_sdk::Client, session: &Session) {
             tracing::warn!(
                 "Bot state could not be loaded; message handler not registered: {error}"
             );
-            return;
+            return None;
         }
     };
     let ctx = Arc::new(Runtime {
+        // The handler context owns its own copy of the session strings.
         user_id: session.user_id.clone(),
         display_name: session.display_name.clone(),
         identity: session.identity.clone(),
@@ -72,11 +74,12 @@ pub async fn attach(client: &matrix_sdk::Client, session: &Session) {
         state: tokio::sync::Mutex::new(state),
         trust: tokio::sync::Mutex::new(trusted::TrustMemory::default()),
     });
+    // The message handler keeps its own handle to the same runtime.
     register_message_handler(client, Arc::clone(&ctx));
-    register_invite_handler(client, Arc::clone(&ctx));
     #[cfg(feature = "e2ee")]
-    register_encrypted_handler(client, ctx);
+    register_encrypted_handler(client, Arc::clone(&ctx));
     HANDLERS_REGISTERED.store(true, Ordering::Relaxed);
+    Some(ctx)
 }
 
 fn register_message_handler(client: &matrix_sdk::Client, ctx: Arc<Runtime>) {
@@ -114,78 +117,6 @@ fn register_message_handler(client: &matrix_sdk::Client, ctx: Arc<Runtime>) {
             dispatch::handle(&room, &ctx, incoming.borrowed()).await;
         }
     });
-}
-
-fn register_invite_handler(client: &matrix_sdk::Client, ctx: Arc<Runtime>) {
-    use ruma::events::room::member::{MembershipState, StrippedRoomMemberEvent};
-
-    client.add_event_handler(move |ev: StrippedRoomMemberEvent, room: matrix_sdk::Room| {
-        let ctx = Arc::clone(&ctx);
-        async move {
-            if ev.content.membership != MembershipState::Invite {
-                return;
-            }
-            if ev.state_key.as_str() != ctx.user_id {
-                return;
-            }
-            let sender = ev.sender.to_string();
-            let room_id = room.room_id().to_string();
-            let dedup_key = format!("invite:{room_id}:{sender}");
-            if already_processed(&ctx, &dedup_key).await {
-                return;
-            }
-            let query = trusted::TrustQuery {
-                amctl_url: ctx.amctl_url.clone(),
-                api_key: ctx.amctl_api_key.clone(),
-                fallback: ctx.trusted_senders.clone(),
-            };
-            let action = {
-                let mut memory = ctx.trust.lock().await;
-                trusted::refresh(&mut memory, &query).await;
-                trusted::invite_action(&memory, &sender)
-            };
-            match action {
-                trusted::InviteAction::Reject => {
-                    tracing::warn!(
-                        room_id = %room_id,
-                        sender = %sender,
-                        "reject_untrusted"
-                    );
-                    record_processed(&ctx, &dedup_key).await;
-                }
-                trusted::InviteAction::Join => {
-                    if let Err(error) = room.join().await {
-                        tracing::warn!(room_id = %room_id, "Invite join failed: {error}");
-                        return;
-                    }
-                    let greeting = trusted::greeting(&ctx.display_name);
-                    let content =
-                        ruma::events::room::message::RoomMessageEventContent::text_plain(greeting);
-                    if let Err(error) = room.send(content).await {
-                        tracing::warn!(room_id = %room_id, "Invite greeting was not sent: {error}");
-                    }
-                    record_processed(&ctx, &dedup_key).await;
-                }
-            }
-        }
-    });
-}
-
-async fn already_processed(ctx: &Runtime, event_id: &str) -> bool {
-    ctx.state
-        .lock()
-        .await
-        .processed_event_ids
-        .iter()
-        .any(|id| id == event_id)
-}
-
-async fn record_processed(ctx: &Runtime, event_id: &str) {
-    let mut state = ctx.state.lock().await;
-    trigger::push_processed(&mut state.processed_event_ids, event_id);
-    if let Err(error) = state.save() {
-        tracing::warn!("Could not save processed event ids: {error}");
-    }
 }
 
 #[cfg(feature = "e2ee")]

@@ -13,6 +13,7 @@ use std::fs::OpenOptions;
 use std::io::ErrorKind;
 use std::io::Write;
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 use std::time::Duration;
 use tracing::info;
 
@@ -367,13 +368,19 @@ async fn resolve_device_id(
 /// `sync_once` keeps room state current. With the `e2ee` feature, the same
 /// call also delivers to-device events and crypto key updates through the
 /// SQLite store opened for this client.
-pub fn start_background_sync(client: Client) -> tokio::task::JoinHandle<()> {
+pub fn start_background_sync(
+    client: Client,
+    after_sync: Option<Arc<tokio::sync::Notify>>,
+) -> tokio::task::JoinHandle<()> {
     tokio::spawn(async move {
         let mut settings = SyncSettings::default().timeout(Duration::from_secs(30));
         loop {
             match client.sync_once(settings.clone()).await {
                 Ok(response) => {
                     settings = settings.token(response.next_batch);
+                    if let Some(notify) = &after_sync {
+                        notify.notify_one();
+                    }
                 }
                 Err(e) => {
                     tracing::warn!("Background sync error: {}", e);
