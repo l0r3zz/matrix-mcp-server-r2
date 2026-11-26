@@ -3,7 +3,19 @@
 > Rust implementation of the Matrix MCP Server -- a drop-in replacement for
 > [matrix-mcp-server](https://github.com/mjknowles/matrix-mcp-server) (TypeScript)
 
-## Status: Phase 3 -- Cross-signed E2EE (v0.2.0)
+## Latest release: 0.4.0
+
+`v0.4.0` is the current release. The `Cargo.toml` version is `0.4.0`, and the git tag is `v0.4.0`.
+
+### Image attachments
+
+When `BOT_ENABLED=true`, a triggered prompt can carry one image file from a Matrix client. The server sends that image to the backend model that evaluates the prompt. Set `MODEL_ACCEPTS_IMAGES=true` only when that Agent Zero model accepts images. If the variable is unset or has any other value, the server posts one room error and does not evaluate the prompt. Other file types stay on the existing path. One image per message is supported.
+
+### Invite retry
+
+A trusted invite whose first join returns HTTP 403 because the user is not invited yet is retried while the invite remains, for at most 5 attempts. A ban, a missing room, an unsupported room version, and a 403 after the invite is gone stop after one attempt.
+
+## Status
 
 | Phase | Description | Status |
 |-------|-------------|--------|
@@ -58,7 +70,7 @@ exposes Matrix operations as MCP tools over the Streamable HTTP transport.
 
 `list_invitations` lists pending invites. It does not join or decline a room. With `BOT_ENABLED` unset it still works, and it reports trust as unknown.
 
-When `BOT_ENABLED=true`, startup registers the message handler, starts the invite reconciler, then starts background sync. The reconciler joins a pending invite from a trusted sender and posts one greeting. A temporary join failure retries at most 5 times. A permanent failure stops. The crate version in `Cargo.toml` is `0.4.0`.
+When `BOT_ENABLED=true`, startup registers the message handler, starts the invite reconciler, then starts background sync. The reconciler joins a pending invite from a trusted sender and posts one greeting. A temporary join failure retries at most 5 times. A 403 that says the user is not invited yet is temporary while the invite remains. A ban, a missing room, an unsupported room version, and any other permanent failure stop after one attempt. The crate version in `Cargo.toml` is `0.4.0`.
 
 ## Tech Stack
 
@@ -112,7 +124,7 @@ Release images and the release binary are built with `--features e2ee`. E2EE sta
 ## Configuration
 
 All configuration is via environment variables (or a `.env` file).
-See `.env.example` for the full list. Required variables:
+See `.env.example` for the full list.
 
 | Variable | Description |
 |----------|-------------|
@@ -120,6 +132,8 @@ See `.env.example` for the full list. Required variables:
 | `MATRIX_USER_ID` | Matrix user ID (e.g., `@bot:example.com`) |
 | `MATRIX_ACCESS_TOKEN` | Matrix access token |
 | `PORT` | Server port (default: 3000) |
+| `BOT_ENABLED` | Set to `true` to register the Matrix bot and the invite reconciler |
+| `MODEL_ACCEPTS_IMAGES` | Set to `true` only when the Agent Zero model accepts images. Any other value refuses an image prompt |
 
 ## Testing
 
