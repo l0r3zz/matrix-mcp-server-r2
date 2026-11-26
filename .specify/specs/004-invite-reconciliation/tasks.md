@@ -170,19 +170,26 @@ Principle III applies to every task:
 
 ## Phase 6: Polish and Release
 
-- [ ] T025 [P] Update `src/AGENTS.md`:
+- [X] T025 [P] Update `src/AGENTS.md`:
   - Rename every kebab-case tool name in `src/AGENTS.md` to the registered snake_case name. The current names include `create-room`, `send-message`, `send-direct-message`, `bootstrap-e2ee`, and `get-encryption-status`. The target names are `create_room`, `send_message`, `send_direct_message`, `bootstrap_e2ee`, and `get_encryption_status`.
   - Add `src/bot/invites.rs`, the new startup order (attach, reconciler, then background sync), `list_invitations`, and the `21 + 2` tool count.
   - Say that the 004 reconciler replaces the 003 invite event handler. Leave `.specify/specs/003-integrated-matrix-bot/` unchanged as the 003 record.
   - Update the root `AGENTS.md` to `21 + 2`.
   - In `.cursor/rules/project-context.mdc`, `.cursor/rules/rust-e2ee.mdc`, and `.cursor/rules/mcp-tools.mdc`, change the tool count to `21 + 2`, and rename every tool name to snake_case.
-- [ ] T026 [P] Update `README.md`:
+- [X] T026 [P] Update `README.md` (split on 2026-11-25; version bump stays open):
   - Rename the tool names in the tool parity table to snake_case.
   - Add `list_invitations` and the automatic-join behavior.
   - Change the tool counts.
-  - Bump `version` in `Cargo.toml` to `0.4.0`, and refresh `Cargo.lock`.
-- [ ] T027 Run `cargo fmt --all --check`, `cargo clippy --all-targets -- -D warnings`, `cargo clippy --all-targets --features e2ee -- -D warnings`, `cargo test`, and `cargo test --features e2ee`.
-- [ ] T028 Run the `@agent0-2` canary in `quickstart.md` only after the user approves the deploy. Record the result in `spec/T028-Agent0-2-Invite-Result-YYYYMMDD.md`. Do not upgrade any other agent, tag, or push until the user asks.
+  - Leave `version` in `Cargo.toml` at `0.3.1`.
+- [X] T026b Bump `version` in `Cargo.toml` to `0.4.0`, and refresh `Cargo.lock`, after every feature in the 0.4.0 release is in the tree. Applied on 2026-11-26.
+- [X] T027 Run `cargo fmt --all --check`, `cargo clippy --all-targets -- -D warnings`, `cargo clippy --all-targets --features e2ee -- -D warnings`, `cargo test`, and `cargo test --features e2ee`. Passed on 2026-11-26.
+- [X] T028 Run the `@agent0-2` canary in `quickstart.md` only after the user approves the deploy. Record the result in `spec/T028-Agent0-2-Invite-Result-YYYYMMDD.md`. Do not upgrade any other agent, tag, or push until the user asks. Run this again only after T029, and only when the user approves the deploy. Passed on 2026-11-26. The record is `spec/T028-Agent0-2-Invite-Result-20261126.md`. No tag or push was made.
+- [X] T029 Research the trusted-invite `make_join` 403 race in `spec/Invite-Join-403-Race-20261126.md`, then fix it in `src/bot/invites.rs`. Added by hand on 2026-11-26. Implemented on 2026-11-26. Do not drop this task if `tasks.md` is regenerated.
+  - The homeserver returned 403 `You are not invited to this room` while the invite from a trusted sender was still being saved. `classify()` marks that 403 permanent, and the invite stays pending until the process restarts. The same failure is in `spec/T028-Agent0-2-Invite-Result-20261111.md`.
+  - Decide which 403 answers stay final (ban, room not found, unsupported room version, invite already gone) and which are retried while the room is still a pending invite from a trusted sender.
+  - The fix joins that still-pending trusted invite without a process restart and posts the greeting once. `list_invitations` shows the last error until the join succeeds. A join that is already in progress does not start a second join.
+  - Add a test for one 403 while the invite remains, followed by one successful join. A 404, and a 403 after the invite is gone, still stop after one attempt.
+  - Do not add a Cargo dependency. Do not bump `Cargo.toml`. Do not deploy, tag, or push.
 
 ## Dependencies
 
@@ -191,6 +198,7 @@ Principle III applies to every task:
 - US2 (Phase 4) depends on T004 and T006 only. It can run in parallel with US1. Its `trusted` and `attempts` fields show real values once US1 is done.
 - US3 (Phase 5) depends on US1 (T011 and T013).
 - Phase 6 depends on all stories.
+- T029 depends on T023. Run T029 before the next T028 canary. T026b stays blocked until every 0.4.0 feature is in the tree, including this fix.
 
 ## Parallel Opportunities
 

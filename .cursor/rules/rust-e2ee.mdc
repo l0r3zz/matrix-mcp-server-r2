@@ -8,7 +8,7 @@ alwaysApply: false
 
 ## Project Context
 
-This is `matrix-mcp-server-r2`, the unified Rust Matrix MCP gateway for the Agent-Matrix fleet. It provides 20 operational Matrix tools that transparently support Cross-Signed E2EE by default (with automatic pre-flight `/keys/query` fallback to unencrypted rooms when an invitee lacks cross-signed E2EE keys) plus 2 E2EE management tools (`bootstrap-e2ee` and `get-encryption-status`), and serves as the single Matrix client and SQLite crypto store owner per agent container (with Stage 2 absorbing `matrix-bot` into `src/bot/`).
+This is `matrix-mcp-server-r2`, the unified Rust Matrix MCP gateway for the Agent-Matrix fleet. It provides 21 operational Matrix tools that transparently support Cross-Signed E2EE by default (with automatic pre-flight `/keys/query` fallback to unencrypted rooms when an invitee lacks cross-signed E2EE keys) plus 2 E2EE management tools (`bootstrap_e2ee` and `get_encryption_status`), and serves as the single Matrix client and SQLite crypto store owner per agent container (with Stage 2 absorbing `matrix-bot` into `src/bot/`). The operational set includes `list_invitations`.
 
 ### Crate Versions (pin these in all code and suggestions)
 
@@ -43,21 +43,21 @@ When the `e2e-encryption` feature is enabled, `matrix-sdk` 0.19 handles encrypti
 ### What We Must Implement
 
 1. **Persistent crypto store & `.device-id`** -- Bundled SQLite store at `CRYPTO_STORE_PATH` (`0700`) and `$CRYPTO_STORE_PATH/.device-id` aligned with `/_matrix/client/v3/account/whoami`, with exclusive process lock
-2. **Startup auto-bootstrap & `bootstrap-e2ee` tool** -- Automatically unlock Secret Storage / cross-signing on startup when `E2EE_ENABLED=true` (or create cross-signing once on a fresh account and write `$CRYPTO_STORE_PATH/recovery-key` mode `0600`)
+2. **Startup auto-bootstrap & `bootstrap_e2ee` tool** -- Automatically unlock Secret Storage / cross-signing on startup when `E2EE_ENABLED=true` (or create cross-signing once on a fresh account and write `$CRYPTO_STORE_PATH/recovery-key` mode `0600`)
 3. **Strict cross-signed recipient strategy** -- Configure `matrix-sdk` 0.19 so Megolm room keys are shared **only** with cross-signed devices (withholding keys from unverified devices via `m.unverified`; never `TOFU`)
-4. **E2EE-by-default room creation with pre-flight capability fallback** -- `create-room` and `send-direct-message` default to `encryptionMode: "auto"`, querying `/_matrix/client/v3/keys/query` for invitees to enable `m.room.encryption` when all invitees have cross-signed keys or automatically fall back to an unencrypted room when an invitee lacks E2EE keys (failing closed on network errors)
-5. **Transparent messaging & UTD handling** -- `send-message`, `get-room-messages`, `get-messages-by-date`, and `identify-active-users` work seamlessly on both encrypted and unencrypted rooms, surfacing `UnableToDecrypt` events as `[Encrypted message - unable to decrypt (missing_key)]`
-6. **Encryption status & `/health` exposure** -- `get-encryption-status` MCP tool and `e2ee` / `crossSigned` fields on `GET /health`
+4. **E2EE-by-default room creation with pre-flight capability fallback** -- `create_room` and `send_direct_message` default to `encryptionMode: "auto"`, querying `/_matrix/client/v3/keys/query` for invitees to enable `m.room.encryption` when all invitees have cross-signed keys or automatically fall back to an unencrypted room when an invitee lacks E2EE keys (failing closed on network errors)
+5. **Transparent messaging & UTD handling** -- `send_message`, `get_room_messages`, `get_messages_by_date`, and `identify_active_users` work seamlessly on both encrypted and unencrypted rooms, surfacing `UnableToDecrypt` events as `[Encrypted message - unable to decrypt (missing_key)]`
+6. **Encryption status & `/health` exposure** -- `get_encryption_status` MCP tool and `e2ee` / `crossSigned` fields on `GET /health`
 
 Items 1-6 are implemented in `src/matrix/client.rs`, `src/matrix/e2ee.rs`, `src/mcp/server.rs`, and `src/main.rs`. Room creation queries keys before `create_room`. Readers keep `UnableToDecrypt` events. `/health` includes `e2ee` and `crossSigned`.
 
 ## Unified Tool Surface (No `-r2` Duplicate Tools)
 
 Do not create duplicate `-r2` room/message tools or throw `EncryptedRoomError` on existing tools.
-- **Upgraded in place**: `create-room`, `send-direct-message`, `send-message`, `get-room-messages`, `get-messages-by-date`, `identify-active-users`
+- **Upgraded in place**: `create_room`, `send_direct_message`, `send_message`, `get_room_messages`, `get_messages_by_date`, `identify_active_users`
 - **New E2EE management tools**:
-  - `bootstrap-e2ee` -- Verify or re-run device key upload, Secret Storage unlock, and cross-signing
-  - `get-encryption-status` -- Report device ID, cross-signing state, crypto store health, and optional room encryption status
+  - `bootstrap_e2ee` -- Verify or re-run device key upload, Secret Storage unlock, and cross-signing
+  - `get_encryption_status` -- Report device ID, cross-signing state, crypto store health, and optional room encryption status
 
 ## Security Considerations
 

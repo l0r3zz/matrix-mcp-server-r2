@@ -113,6 +113,7 @@ async fn main() -> Result<(), AppError> {
                     amctl_url: config.amctl_url.clone(),
                     amctl_api_key: config.amctl_api_key.clone(),
                     trusted_senders: config.trusted_senders.clone(),
+                    accepts_images: config.accepts_images,
                 },
             )
             .await

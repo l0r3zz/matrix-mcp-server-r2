@@ -42,6 +42,7 @@ fn session(amctl_url: String, fallback: Vec<String>) -> Session {
         amctl_url,
         amctl_api_key: Some("lab-test-key".to_string()),
         trusted_senders: fallback,
+        accepts_images: false,
     }
 }
 
@@ -297,6 +298,14 @@ fn fast_policy() -> RetryPolicy {
     }
 }
 
+fn due_now() -> RetryPolicy {
+    RetryPolicy {
+        base: Duration::ZERO,
+        cap: Duration::ZERO,
+        max_attempts: 5,
+    }
+}
+
 fn test_config(homeserver_url: &str) -> Arc<Config> {
     Arc::new(Config {
         matrix_homeserver_url: homeserver_url.to_string(),
@@ -326,6 +335,7 @@ fn test_config(homeserver_url: &str) -> Arc<Config> {
         debug: false,
         skip_matrix_init: false,
         bot_enabled: false,
+        accepts_images: false,
         bot_display_name: String::new(),
         agent_identity: "Agent Zero".to_string(),
         a0_api_url: "http://127.0.0.1:9/api/api_message".to_string(),
@@ -575,6 +585,128 @@ async fn a_403_is_permanent_after_one_join() {
     );
     assert!(!body.to_string().contains("nope"));
     handle.abort();
+}
+
+#[tokio::test]
+#[serial]
+async fn a_not_invited_403_retries_while_the_invite_remains() {
+    let homeserver = MockServer::start().await;
+    mount_homeserver(&homeserver, invite_sync(TRUSTED)).await;
+    mount_status(
+        &homeserver,
+        403,
+        json!({
+            "errcode": "M_FORBIDDEN",
+            "error": "You are not invited to this room."
+        }),
+        Some(1),
+    )
+    .await;
+    let amctl = trusted_server(json!([{ "matrix_user_id": TRUSTED }]), 200).await;
+    let client = synced_client(&homeserver).await;
+    let runtime = runtime_for(&session(amctl.uri(), Vec::new())).expect("runtime");
+    let registry = Arc::new(InviteRegistry::new());
+    let server = MatrixMcpServer::new(client.clone(), test_config(&homeserver.uri()))
+        .with_invites(Arc::clone(&registry));
+    let handle = spawn_reconciler(
+        client,
+        runtime,
+        Arc::clone(&registry),
+        Arc::new(tokio::sync::Notify::new()),
+        RetryPolicy {
+            base: Duration::from_millis(250),
+            cap: Duration::from_millis(250),
+            max_attempts: 5,
+        },
+    );
+    wait_for_joins(&homeserver, 1).await;
+    let pending = tool_json(&server).await;
+    assert_eq!(pending["invitations"][0]["attempts"], 1);
+    assert_eq!(
+        pending["invitations"][0]["lastError"],
+        "temporary 403 M_FORBIDDEN"
+    );
+    assert!(!pending.to_string().contains("not invited"));
+    wait_for_joins(&homeserver, 2).await;
+    tokio::time::sleep(Duration::from_millis(100)).await;
+    assert_eq!(
+        count_path(&homeserver, "PUT", "/send/m.room.message/").await,
+        1
+    );
+    handle.abort();
+}
+
+#[tokio::test]
+#[serial]
+async fn a_404_stops_after_one_join() {
+    let homeserver = MockServer::start().await;
+    mount_homeserver(&homeserver, invite_sync(TRUSTED)).await;
+    mount_status(
+        &homeserver,
+        404,
+        json!({"errcode": "M_NOT_FOUND", "error": "Room not found."}),
+        None,
+    )
+    .await;
+    let amctl = trusted_server(json!([{ "matrix_user_id": TRUSTED }]), 200).await;
+    let client = synced_client(&homeserver).await;
+    let runtime = runtime_for(&session(amctl.uri(), Vec::new())).expect("runtime");
+    let registry = Arc::new(InviteRegistry::new());
+    let server = MatrixMcpServer::new(client.clone(), test_config(&homeserver.uri()))
+        .with_invites(Arc::clone(&registry));
+    let handle = spawn_reconciler(
+        client,
+        runtime,
+        Arc::clone(&registry),
+        Arc::new(tokio::sync::Notify::new()),
+        fast_policy(),
+    );
+    wait_for_joins(&homeserver, 1).await;
+    tokio::time::sleep(Duration::from_millis(200)).await;
+    assert_eq!(count_path(&homeserver, "POST", "/join").await, 1);
+    let body = tool_json(&server).await;
+    assert_eq!(body["invitations"][0]["attempts"], 1);
+    assert_eq!(
+        body["invitations"][0]["lastError"],
+        "permanent 404 M_NOT_FOUND"
+    );
+    handle.abort();
+}
+
+#[tokio::test]
+#[serial]
+async fn a_403_after_the_invite_is_gone_does_not_join_again() {
+    let homeserver = MockServer::start().await;
+    mount_homeserver(&homeserver, invite_sync(TRUSTED)).await;
+    mount_status(
+        &homeserver,
+        403,
+        json!({
+            "errcode": "M_FORBIDDEN",
+            "error": "You are not invited to this room."
+        }),
+        None,
+    )
+    .await;
+    let amctl = trusted_server(json!([{ "matrix_user_id": TRUSTED }]), 200).await;
+    let client = synced_client(&homeserver).await;
+    let runtime = runtime_for(&session(amctl.uri(), Vec::new())).expect("runtime");
+    let registry = Arc::new(InviteRegistry::new());
+    reconcile_pass(&client, &runtime, &registry, &due_now()).await;
+    assert_eq!(count_path(&homeserver, "POST", "/join").await, 1);
+    Mock::given(method("GET"))
+        .and(path("/_matrix/client/v3/sync"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(left_sync()))
+        .with_priority(1)
+        .mount(&homeserver)
+        .await;
+    client
+        .sync_once(SyncSettings::default().timeout(Duration::from_secs(3)))
+        .await
+        .expect("sync");
+    reconcile_pass(&client, &runtime, &registry, &due_now()).await;
+    assert_eq!(count_path(&homeserver, "POST", "/join").await, 1);
+    assert!(registry.snapshot().await.is_empty());
 }
 
 #[tokio::test]

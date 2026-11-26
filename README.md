@@ -37,23 +37,28 @@ exposes Matrix operations as MCP tools over the Streamable HTTP transport.
   (Agent Zero) ----------------->  (CORS, trace) --> StreamableHttpService
                                                          |
                                                     ServerHandler
-                                                    (20 MCP tools)
+                                                    (21 + 2 MCP tools)
                                                          |
                                                     matrix-sdk Client
                                                          |
                                                     Matrix Homeserver
 ```
 
-## Tool Parity (v1): 20 tools
+## Tools: 21 + 2
 
 | Category | Tools |
 |----------|-------|
-| Rooms | list-joined-rooms, get-room-info, create-room, join-room, leave-room |
-| Messages | get-room-messages, get-messages-by-date, send-message, send-direct-message |
-| Members | get-room-members, invite-user, identify-active-users |
-| Profiles | get-user-profile, get-my-profile, get-all-users |
-| Admin | set-room-name, set-room-topic |
-| Discovery | search-public-rooms, get-notification-counts, get-direct-messages |
+| Rooms | list_joined_rooms, get_room_info, create_room, join_room, leave_room, list_invitations |
+| Messages | get_room_messages, get_messages_by_date, send_message, send_direct_message |
+| Members | get_room_members, invite_user, identify_active_users |
+| Profiles | get_user_profile, get_my_profile, get_all_users |
+| Admin | set_room_name, set_room_topic |
+| Discovery | search_public_rooms, get_notification_counts, get_direct_messages |
+| E2EE | bootstrap_e2ee, get_encryption_status |
+
+`list_invitations` lists pending invites. It does not join or decline a room. With `BOT_ENABLED` unset it still works, and it reports trust as unknown.
+
+When `BOT_ENABLED=true`, startup registers the message handler, starts the invite reconciler, then starts background sync. The reconciler joins a pending invite from a trusted sender and posts one greeting. A temporary join failure retries at most 5 times. A permanent failure stops. The crate version in `Cargo.toml` is `0.4.0`.
 
 ## Tech Stack
 
@@ -175,7 +180,9 @@ src/
     client.rs          # matrix-sdk client creation and background sync
     cache.rs           # TTL-based client cache
   mcp/
-    server.rs          # MatrixMcpServer: all 20 tools + ServerHandler
+    server.rs          # MatrixMcpServer: 21 + 2 tools + ServerHandler
+  bot/
+    invites.rs         # Trusted-invite reconciler when BOT_ENABLED=true
 reference/
   ts-source/           # Original TypeScript implementation (reference)
   docs/                # Plans, specs, operational docs

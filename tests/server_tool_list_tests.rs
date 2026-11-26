@@ -52,6 +52,7 @@ async fn the_tool_router_lists_23_tools_including_list_invitations() {
         debug: false,
         skip_matrix_init: true,
         bot_enabled: false,
+        accepts_images: false,
         bot_display_name: String::new(),
         agent_identity: "Agent Zero".to_string(),
         a0_api_url: "http://127.0.0.1:9/api/api_message".to_string(),

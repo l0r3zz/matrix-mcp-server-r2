@@ -54,6 +54,7 @@ fn test_config(homeserver_url: &str) -> Arc<Config> {
         debug: false,
         skip_matrix_init: false,
         bot_enabled: false,
+        accepts_images: false,
         bot_display_name: String::new(),
         agent_identity: "Agent Zero".to_string(),
         a0_api_url: "http://localhost:80/api/api_message".to_string(),

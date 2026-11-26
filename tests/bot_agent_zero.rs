@@ -17,6 +17,7 @@ fn turn(api_url: String, state_dir: std::path::PathBuf, prompt: &str) -> AgentZe
         prompt: prompt.to_string(),
         identity: "Agent Zero".to_string(),
         user_id: USER.to_string(),
+        image: None,
     }
 }
 

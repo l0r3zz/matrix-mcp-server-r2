@@ -121,6 +121,8 @@ Features MUST be delivered incrementally per the roadmap phases:
    `matrix-mcp-server-r2`, retiring the separate `matrix-bot` process.
 3. `004-invite-reconciliation`: Reconcile pending invites after startup and
    after each successful sync, and add the read-only `list_invitations` tool.
+4. `005-image-prompt`: One image on a triggered prompt, with a room error when
+   the model cannot take the image or the image will not be included.
 Each increment MUST be independently deployable and testable.
 
 ### X. Spec-Driven Development
@@ -228,8 +230,10 @@ Compliance review: a change that touches tool contracts, crypto, or the
 implementation. A locked stack version MUST NOT change inside a feature
 spec. That change requires an amendment here first.
 
-**Version**: 2.1.0 | **Ratified**: 2026-05-11 | **Last Amended**: 2026-11-09
+**Version**: 2.2.0 | **Ratified**: 2026-05-11 | **Last Amended**: 2026-11-25
 
 Amendment 2.0.4 (PATCH): tool names in this file now use the registered snake_case names. The runtime names did not change.
 
 Amendment 2.1.0 (MINOR): the tool surface is `21 + 2`. `004-invite-reconciliation` is on the roadmap. `list_invitations` is a naming example. The locked stack table did not change. The 20 existing tool names stay stable.
+
+Amendment 2.2.0 (MINOR): `005-image-prompt` is on the roadmap. The `21 + 2` tool count and the locked stack table did not change.

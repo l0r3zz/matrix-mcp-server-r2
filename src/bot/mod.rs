@@ -39,6 +39,8 @@ pub struct Session {
     pub amctl_api_key: Option<String>,
     /// Fallback Matrix ids used only when the trusted set is empty.
     pub trusted_senders: Vec<String>,
+    /// `true` only when `MODEL_ACCEPTS_IMAGES` is the string `true`.
+    pub accepts_images: bool,
 }
 
 /// Set a non-empty display name, then register handlers on the shared client.
@@ -71,6 +73,7 @@ pub async fn attach(client: &matrix_sdk::Client, session: &Session) -> Option<Ar
         amctl_url: session.amctl_url.clone(),
         amctl_api_key: session.amctl_api_key.clone(),
         trusted_senders: session.trusted_senders.clone(),
+        accepts_images: session.accepts_images,
         state: tokio::sync::Mutex::new(state),
         trust: tokio::sync::Mutex::new(trusted::TrustMemory::default()),
     });
@@ -83,40 +86,61 @@ pub async fn attach(client: &matrix_sdk::Client, session: &Session) -> Option<Ar
 }
 
 fn register_message_handler(client: &matrix_sdk::Client, ctx: Arc<Runtime>) {
+    use matrix_sdk::event_handler::RawEvent;
     use ruma::events::room::message::{MessageType, SyncRoomMessageEvent};
 
-    client.add_event_handler(move |ev: SyncRoomMessageEvent, room: matrix_sdk::Room| {
-        let ctx = Arc::clone(&ctx);
-        async move {
-            let incoming = match ev {
-                SyncRoomMessageEvent::Original(ev) => {
-                    let (msgtype, body) = match ev.content.msgtype {
-                        MessageType::Text(text) => (Some("m.text".to_string()), Some(text.body)),
-                        _ => (None, None),
-                    };
-                    OwnedIncoming {
+    client.add_event_handler(
+        move |ev: SyncRoomMessageEvent, raw: RawEvent, room: matrix_sdk::Room| {
+            let ctx = Arc::clone(&ctx);
+            async move {
+                let raw_value: serde_json::Value =
+                    serde_json::from_str(raw.get()).unwrap_or(serde_json::Value::Null);
+                let incoming = match ev {
+                    SyncRoomMessageEvent::Original(ev) => {
+                        let (msgtype, body) = match &ev.content.msgtype {
+                            MessageType::Text(text) => {
+                                // The trigger keeps its own copy of the body.
+                                (Some("m.text".to_string()), Some(text.body.clone()))
+                            }
+                            MessageType::Image(image) => {
+                                // The trigger keeps its own copy of the body.
+                                (Some("m.image".to_string()), Some(image.body.clone()))
+                            }
+                            _ => (None, None),
+                        };
+                        let image_content = if msgtype.as_deref() == Some("m.image") {
+                            raw_value
+                                .get("content")
+                                .and_then(|content| serde_json::to_string(content).ok())
+                        } else {
+                            None
+                        };
+                        OwnedIncoming {
+                            event_id: ev.event_id.to_string(),
+                            sender: ev.sender.to_string(),
+                            origin_server_ts: millis(ev.origin_server_ts),
+                            is_room_message: true,
+                            msgtype,
+                            body,
+                            decrypt_error: None,
+                            image_content,
+                        }
+                    }
+                    SyncRoomMessageEvent::Redacted(ev) => OwnedIncoming {
                         event_id: ev.event_id.to_string(),
                         sender: ev.sender.to_string(),
                         origin_server_ts: millis(ev.origin_server_ts),
                         is_room_message: true,
-                        msgtype,
-                        body,
+                        msgtype: None,
+                        body: None,
                         decrypt_error: None,
-                    }
-                }
-                SyncRoomMessageEvent::Redacted(ev) => OwnedIncoming {
-                    event_id: ev.event_id.to_string(),
-                    sender: ev.sender.to_string(),
-                    origin_server_ts: millis(ev.origin_server_ts),
-                    is_room_message: true,
-                    msgtype: None,
-                    body: None,
-                    decrypt_error: None,
-                },
-            };
-            dispatch::handle(&room, &ctx, incoming.borrowed()).await;
-        }
-    });
+                        image_content: None,
+                    },
+                };
+                dispatch::handle(&room, &ctx, incoming.borrowed()).await;
+            }
+        },
+    );
 }
 
 #[cfg(feature = "e2ee")]
@@ -166,6 +190,7 @@ async fn on_encrypted(
                     msgtype: None,
                     body: None,
                     decrypt_error: Some(utd_reason_token(&utd_info.reason).to_string()),
+                    image_content: None,
                 }
             } else {
                 owned_from_raw(timeline.raw(), event_id, sender, origin_server_ts)
@@ -179,6 +204,7 @@ async fn on_encrypted(
             msgtype: None,
             body: None,
             decrypt_error: Some(error.to_string()),
+            image_content: None,
         },
     };
     dispatch::handle(&room, &ctx, incoming.borrowed()).await;
@@ -223,6 +249,13 @@ fn owned_from_raw(
         .and_then(|value| value.get("body"))
         .and_then(serde_json::Value::as_str)
         .map(str::to_string);
+    let image_content = if msgtype.as_deref() == Some("m.image") {
+        content
+            .as_ref()
+            .and_then(|value| serde_json::to_string(value).ok())
+    } else {
+        None
+    };
     OwnedIncoming {
         event_id,
         sender,
@@ -231,6 +264,7 @@ fn owned_from_raw(
         msgtype,
         body,
         decrypt_error: None,
+        image_content,
     }
 }
 
@@ -271,6 +305,7 @@ struct OwnedIncoming {
     msgtype: Option<String>,
     body: Option<String>,
     decrypt_error: Option<String>,
+    image_content: Option<String>,
 }
 
 impl OwnedIncoming {
@@ -283,6 +318,7 @@ impl OwnedIncoming {
             msgtype: self.msgtype.as_deref(),
             body: self.body.as_deref(),
             decrypt_error: self.decrypt_error.as_deref(),
+            image_content: self.image_content.as_deref(),
         }
     }
 }

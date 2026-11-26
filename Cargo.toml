@@ -1,6 +1,6 @@
 [package]
 name = "matrix-mcp-server-r2"
-version = "0.3.1"
+version = "0.4.0"
 edition = "2021"
 authors = ["l0r3zz"]
 description = "Rust implementation of Matrix MCP Server - drop-in replacement for TypeScript version"
@@ -60,6 +60,9 @@ url = "2.5"
 
 # Markdown to HTML for bot replies. Used by src/bot/ in a later task.
 pulldown-cmark = "0.13"
+
+# Standard base64 for one image attachment. 0.22.1 is already in Cargo.lock.
+base64 = "0.22.1"
 
 [dev-dependencies]
 tokio-test = "0.4"

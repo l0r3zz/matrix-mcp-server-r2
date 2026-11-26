@@ -45,6 +45,9 @@ pub struct Config {
 
     /// `true` only when `BOT_ENABLED=true`. Any other value leaves the bot off.
     pub bot_enabled: bool,
+    /// `true` only when `MODEL_ACCEPTS_IMAGES` is the string `true`.
+    /// Unset, empty, `false`, and `1` are `false`.
+    pub accepts_images: bool,
     /// Matrix display name. Empty means do not set one.
     pub bot_display_name: String,
     /// Name used in fast replies. `AGENT_IDENTITY`, then `BOT_DISPLAY_NAME`, then `Agent Zero`.
@@ -157,6 +160,9 @@ impl Config {
                 .map(|v| v == "true" || v == "1")
                 .unwrap_or(false),
             bot_enabled: env::var("BOT_ENABLED")
+                .map(|v| v == "true")
+                .unwrap_or(false),
+            accepts_images: env::var("MODEL_ACCEPTS_IMAGES")
                 .map(|v| v == "true")
                 .unwrap_or(false),
             bot_display_name: nonempty_env("BOT_DISPLAY_NAME").unwrap_or_default(),

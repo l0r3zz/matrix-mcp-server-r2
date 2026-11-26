@@ -8,10 +8,10 @@ alwaysApply: false
 
 ## Tool Definition Pattern
 
-Tools are defined in `src/mcp/server.rs` using rmcp attribute macros:
+Tools are defined in `src/mcp/server.rs` using rmcp attribute macros. The registered tool name is the snake_case function name. Do not set a kebab-case `name`. The surface is 21 operational tools plus 2 E2EE tools (`bootstrap_e2ee` and `get_encryption_status`). `list_invitations` is one of the operational tools.
 
 ```rust
-#[tool(name = "tool-name", description = "What this tool does")]
+#[tool(description = "What this tool does")]
 pub async fn tool_name(&self, #[tool(param)] input: ToolInput) -> Result<CallToolResult, McpError> {
     // Implementation
 }

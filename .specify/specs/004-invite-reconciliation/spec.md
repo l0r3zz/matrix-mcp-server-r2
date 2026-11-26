@@ -22,7 +22,11 @@
 - Q: How do failed joins retry? → A: Up to 5 attempts per room. The wait starts at 30 seconds, doubles each time, stops growing at 15 minutes, and has jitter. The Assumptions define that jitter. After the fifth failure, the agent stops trying and shows the last error in the invite list.
 - Q: Which agent is the canary? → A: `@agent0-2`, where the bug was found. This is a stated exception to the `@agent0-5` lab default. Requirements still use `@agent0-N`.
 - Q: What is the name of the discovery tool? → A: `list_invitations`.
-- Q: When a join fails with an error that will not change on retry, should the agent stop retrying at once? → A: Yes. A permanent error (HTTP 403 or 404, or the matching Matrix error code) stops retries at once and is shown in `list_invitations`. Network errors, timeouts, rate limits, and server errors use the 5-attempt schedule.
+- Q: When a join fails with an error that will not change on retry, should the agent stop retrying at once? → A: Yes. A permanent error (HTTP 404, a 403 that is not "not invited", or the matching Matrix error code) stops retries at once and is shown in `list_invitations`. Network errors, timeouts, rate limits, and server errors use the 5-attempt schedule.
+
+### Session 2026-11-26
+
+- Q: A 403 `You are not invited to this room` can arrive before the homeserver finishes saving the invite. Should that stop for the life of the process? → A: No. That 403 is temporary while the room stays invited, and it uses the 5-attempt schedule. A ban, a missing room, an unsupported room version, and a 403 after the invite is gone stop after one attempt. The message text is not stored or logged.
 - Q: If an inviter becomes trusted after the agent skipped that invite, should the agent join on a later check? → A: Yes. Each pass checks each pending invite against the current trusted set. The agent joins once the inviter is trusted. A decision is logged only when it changes for that room.
 
 ## User Scenarios & Testing *(mandatory)*
@@ -71,7 +75,8 @@ A trusted sender invites the agent while the service is running. The agent joins
 
 1. **Given** the service is running, **When** a trusted sender invites the agent, **Then** the agent joins and posts the greeting once.
 2. **Given** a join fails with a temporary error, **When** the next retry time passes, **Then** the agent tries again, for at most 5 attempts in total.
-3. **Given** a join fails with "forbidden" or "room not found", **When** later passes run, **Then** the agent does not try again, and `list_invitations` shows that error.
+3. **Given** a join fails with a ban, "room not found", or an unsupported room version, **When** later passes run, **Then** the agent does not try again, and `list_invitations` shows that error.
+4. **Given** a trusted invite is still pending and the first join returns 403 `You are not invited to this room`, **When** a later pass runs, **Then** the agent tries again and posts the greeting once after the join succeeds. `list_invitations` shows that error until the join succeeds.
 4. **Given** a join attempt is in progress, **When** another pass sees the same invite, **Then** no second join request starts for that room.
 
 ---
@@ -86,6 +91,11 @@ A trusted sender invites the agent while the service is running. The agent joins
 - The room is encrypted. Joining does not reset the crypto store or change device trust. Messages sent before the join may not decrypt. That is a Matrix limit, not a join failure.
 - `BOT_ENABLED` is false. Nothing joins automatically. `list_invitations` and `join_room` still work.
 - The service stops during a retry wait. The pending retry ends with the service, and no task keeps running.
+- A trusted invite is still pending, and the first `make_join` returns 403 `You are not invited to this room` before the homeserver finishes saving the invite. That failure is temporary while the room stays invited. The evidence is `spec/Invite-Join-403-Race-20261126.md`.
+
+## Open follow-up (2026-11-26)
+
+T029 implemented the invite-join 403 race on 2026-11-26. A 403 whose message says the user is not invited is retried while the room stays invited. A ban, a missing room, an unsupported room version, and a 403 after the invite is gone stop after one attempt. The `@agent0-2` canary passed on 2026-11-26. The record is `spec/T028-Agent0-2-Invite-Result-20261126.md`. A later `/speckit-tasks` run must keep T001 through T029. It must not regenerate this feature's task list from scratch.
 
 ## Requirements *(mandatory)*
 
@@ -98,7 +108,7 @@ A trusted sender invites the agent while the service is running. The agent joins
 - **FR-005**: The system MUST NOT join an invite with a missing or malformed inviter.
 - **FR-006**: The system MUST NOT start a second join for a room while one join for that room is in progress.
 - **FR-007**: The system MUST retry a join that fails with a temporary error, for at most 5 attempts in total. Temporary errors are network errors, timeouts, rate limits, and server errors. The wait MUST start at 30 seconds, double each time, stop growing at 15 minutes, and include jitter, as defined in the Assumptions.
-- **FR-007a**: A join that fails with a permanent error MUST NOT be retried. Permanent errors are HTTP 403 and 404, or the matching Matrix error codes. The room MUST stay in `list_invitations` with that error.
+- **FR-007a**: A join that fails with a permanent error MUST NOT be retried. Permanent errors are HTTP 404, an unsupported room version, a 403 whose message does not say the user is not invited, and any other 4xx except 429. The room MUST stay in `list_invitations` with that error. A 403 whose message says the user is not invited is temporary while the room stays invited. The message text MUST NOT be stored or logged. When the invite disappears, the retry state is removed and no further join is sent.
 - **FR-008**: The system MUST treat an "already a member" result as success.
 - **FR-009**: The system MUST post the 003 greeting once per room after an automatic join, whether the join happened at startup or at runtime.
 - **FR-010**: The system MUST provide an MCP tool `list_invitations`. For each pending invite it returns the room id, and where known the room name, canonical alias, topic, inviter, encryption state, trust result, attempt count, and last join error. With no invites it MUST return a success with an empty list.

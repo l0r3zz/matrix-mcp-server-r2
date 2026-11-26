@@ -19,6 +19,8 @@ pub struct Incoming<'a> {
     pub body: Option<&'a str>,
     /// Set when decryption failed. The message body is not available.
     pub decrypt_error: Option<&'a str>,
+    /// Raw `m.image` content JSON. Absent on every other event.
+    pub image_content: Option<&'a str>,
 }
 
 /// What the dispatcher does with one event. The first match wins.
@@ -37,6 +39,11 @@ pub enum Decision {
     FastReply(String),
     /// A trigger that is not a fast command. Phase 3 does not send it.
     Dispatch(String),
+    /// One triggered `m.image`. `caption` is the trimmed remainder and may be empty.
+    /// An image is never a fast reply.
+    ImagePrompt {
+        caption: String,
+    },
 }
 
 impl Decision {
@@ -51,7 +58,8 @@ impl Decision {
             | Decision::DropNotText
             | Decision::UnableToDecrypt { .. }
             | Decision::NoTrigger
-            | Decision::Dispatch(_) => None,
+            | Decision::Dispatch(_)
+            | Decision::ImagePrompt { .. } => None,
         }
     }
 
@@ -178,6 +186,12 @@ pub fn classify(
             reason: reason.to_string(),
         };
     }
+    if event.is_room_message && event.msgtype == Some("m.image") {
+        let Some(remainder) = triggered_remainder(event.body.unwrap_or(""), prefixes) else {
+            return Decision::NoTrigger;
+        };
+        return Decision::ImagePrompt { caption: remainder };
+    }
     if !event.is_room_message || event.msgtype != Some("m.text") {
         return Decision::DropNotText;
     }
@@ -219,6 +233,7 @@ mod tests {
             msgtype: Some("m.text"),
             body: Some(body),
             decrypt_error: None,
+            image_content: None,
         }
     }
 
@@ -364,6 +379,7 @@ mod tests {
             msgtype: None,
             body: None,
             decrypt_error: Some("missing_key"),
+            image_content: None,
         };
         let decision = classify(
             &event,
@@ -433,5 +449,112 @@ mod tests {
         );
         assert_eq!(decision, Decision::Dispatch("what is the time".to_string()));
         assert!(decision.reply_body().is_none());
+    }
+
+    fn image<'a>(body: &'a str, msgtype: &'a str) -> Incoming<'a> {
+        Incoming {
+            msgtype: Some(msgtype),
+            ..text(OTHER, body)
+        }
+    }
+
+    #[test]
+    fn an_image_without_a_prefix_is_ignored() {
+        let event = image("photo.png", "m.image");
+        assert_eq!(
+            classify(
+                &event,
+                SESSION,
+                &prefixes(SESSION, ""),
+                IDENTITY,
+                &[],
+                1_000_000
+            ),
+            Decision::NoTrigger
+        );
+    }
+
+    #[test]
+    fn an_image_prefix_with_an_empty_remainder_is_an_image_prompt() {
+        let event = image("agent0-5:", "m.image");
+        assert_eq!(
+            classify(
+                &event,
+                SESSION,
+                &prefixes(SESSION, ""),
+                IDENTITY,
+                &[],
+                1_000_000
+            ),
+            Decision::ImagePrompt {
+                caption: String::new()
+            }
+        );
+    }
+
+    #[test]
+    fn ping_hello_and_whoami_on_an_image_are_not_fast_replies() {
+        for body in ["agent0-5: ping", "agent0-5: hello", "agent0-5: whoami"] {
+            let event = image(body, "m.image");
+            let decision = classify(
+                &event,
+                SESSION,
+                &prefixes(SESSION, ""),
+                IDENTITY,
+                &[],
+                1_000_000,
+            );
+            assert!(
+                matches!(decision, Decision::ImagePrompt { .. }),
+                "{body} was {decision:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn a_file_video_or_audio_message_stays_dropped() {
+        for msgtype in ["m.file", "m.video", "m.audio"] {
+            let event = image("agent0-5: look", msgtype);
+            assert_eq!(
+                classify(
+                    &event,
+                    SESSION,
+                    &prefixes(SESSION, ""),
+                    IDENTITY,
+                    &[],
+                    1_000_000
+                ),
+                Decision::DropNotText,
+                "{msgtype}"
+            );
+        }
+    }
+
+    #[test]
+    fn an_image_that_failed_to_decrypt_stays_unable_to_decrypt() {
+        let event = Incoming {
+            event_id: "$secret",
+            sender: OTHER,
+            origin_server_ts: 1_000_000,
+            is_room_message: true,
+            msgtype: Some("m.image"),
+            body: Some("agent0-5: look"),
+            decrypt_error: Some("missing_key"),
+            image_content: None,
+        };
+        match classify(
+            &event,
+            SESSION,
+            &prefixes(SESSION, ""),
+            IDENTITY,
+            &[],
+            1_000_000,
+        ) {
+            Decision::UnableToDecrypt { event_id, reason } => {
+                assert_eq!(event_id, "$secret");
+                assert_eq!(reason, "missing_key");
+            }
+            other => panic!("expected unable to decrypt, got {other:?}"),
+        }
     }
 }

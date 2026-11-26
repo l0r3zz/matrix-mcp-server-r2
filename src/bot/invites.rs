@@ -56,9 +56,9 @@ pub fn decide(inviter: Option<&UserId>, trust: &TrustMemory) -> Decision {
 /// Whether a failed join can succeed without a change.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ErrorClass {
-    /// HTTP 403, 404, or another 4xx other than 429.
+    /// A ban, a missing room, an unsupported room version, or another 4xx other than 429.
     Permanent,
-    /// A network error, a timeout, a rate limit, or a server error.
+    /// A network error, a timeout, a rate limit, a server error, or a 403 that says the user is not invited yet.
     Temporary,
 }
 
@@ -163,6 +163,7 @@ pub fn runtime_for(session: &super::Session) -> crate::error::Result<Arc<Runtime
         amctl_url: session.amctl_url.clone(),
         amctl_api_key: session.amctl_api_key.clone(),
         trusted_senders: session.trusted_senders.clone(),
+        accepts_images: session.accepts_images,
         state: Mutex::new(state),
         trust: Mutex::new(TrustMemory::default()),
     }))
@@ -226,6 +227,20 @@ pub fn render_invitations(mut views: Vec<InvitationView>) -> serde_json::Value {
     })
 }
 
+/// True when a 403 says the invite is not saved yet.
+///
+/// The message is read only for this check. It is not stored or logged.
+fn not_invited_yet(error: &matrix_sdk::Error) -> bool {
+    let Some(api) = error.as_client_api_error() else {
+        return false;
+    };
+    let ruma::api::error::ErrorBody::Standard(body) = &api.body else {
+        return false;
+    };
+    matches!(&body.kind, ruma::api::error::ErrorKind::Forbidden)
+        && body.message.to_ascii_lowercase().contains("not invited")
+}
+
 /// Classify a failed `room.join()`. The server message body is discarded.
 pub fn classify(error: &matrix_sdk::Error) -> JoinError {
     let Some(api) = error.as_client_api_error() else {
@@ -248,7 +263,8 @@ pub fn classify(error: &matrix_sdk::Error) -> JoinError {
                 | ruma::api::error::ErrorKind::UnsupportedRoomVersion
         )
     });
-    let class = if limited || (500..600).contains(&status) {
+    // A 403 of "not invited" can arrive before the homeserver saves the invite.
+    let class = if not_invited_yet(error) || limited || (500..600).contains(&status) {
         ErrorClass::Temporary
     } else if named_permanent || (400..500).contains(&status) {
         ErrorClass::Permanent
@@ -554,15 +570,21 @@ mod tests {
     }
 
     fn sdk_error(status: u16, kind: Option<ruma::api::error::ErrorKind>) -> matrix_sdk::Error {
+        sdk_error_message(status, kind, "secret body")
+    }
+
+    fn sdk_error_message(
+        status: u16,
+        kind: Option<ruma::api::error::ErrorKind>,
+        message: &str,
+    ) -> matrix_sdk::Error {
         use ruma::api::client::uiaa::UiaaResponse;
         use ruma::api::error::{
             Error as RumaError, ErrorBody, FromHttpResponseError, StandardErrorBody,
         };
         let status_code = matrix_sdk::reqwest::StatusCode::from_u16(status).expect("status");
         let body = match kind {
-            Some(kind) => {
-                ErrorBody::Standard(StandardErrorBody::new(kind, "secret body".to_string()))
-            }
+            Some(kind) => ErrorBody::Standard(StandardErrorBody::new(kind, message.to_string())),
             None => ErrorBody::Json(serde_json::json!({"oops": true})),
         };
         let http = matrix_sdk::HttpError::Api(Box::new(FromHttpResponseError::Server(
@@ -644,6 +666,20 @@ mod tests {
             classify(&sdk_error(403, Some(ErrorKind::Forbidden))).to_string(),
             "permanent 403 M_FORBIDDEN"
         );
+        let race = classify(&sdk_error_message(
+            403,
+            Some(ErrorKind::Forbidden),
+            "Answer from v-site.net: [403 / M_FORBIDDEN] You are not invited to this room.",
+        ));
+        assert_eq!(race.class, ErrorClass::Temporary);
+        assert_eq!(race.to_string(), "temporary 403 M_FORBIDDEN");
+        assert!(!race.to_string().contains("invited"));
+        let ban = classify(&sdk_error_message(
+            403,
+            Some(ErrorKind::Forbidden),
+            "You are banned from this room.",
+        ));
+        assert_eq!(ban.class, ErrorClass::Permanent);
         for (status, kind) in [
             (429, Some(ErrorKind::LimitExceeded(Default::default()))),
             (502, None),
@@ -723,6 +759,7 @@ mod tests {
             amctl_url: "http://127.0.0.1:9".to_string(),
             amctl_api_key: None,
             trusted_senders: Vec::new(),
+            accepts_images: false,
         })
         .expect("runtime");
         let handle = spawn_reconciler(

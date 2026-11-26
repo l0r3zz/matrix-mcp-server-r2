@@ -364,6 +364,7 @@ fn config(
         debug: false,
         skip_matrix_init: skip,
         bot_enabled: false,
+        accepts_images: false,
         bot_display_name: String::new(),
         agent_identity: "Agent Zero".to_string(),
         a0_api_url: "http://localhost:80/api/api_message".to_string(),
